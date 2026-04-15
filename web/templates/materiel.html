@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}{{ materiel.code_vigile }} — {{ app_name }}{% endblock %}
+
+{% block content %}
+<!-- En-tête avec code et statut -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+        <div>
+            <h1 style="font-size: 24px; font-weight: 800; color: var(--accent); margin-bottom: 4px;">
+                {{ materiel.code_vigile }}
+            </h1>
+            <p style="color: var(--text-secondary); font-size: 14px;">
+                {{ materiel.type | capitalize }} — {{ materiel.marque }} {{ materiel.modele }}
+            </p>
+        </div>
+        <div>
+            {% if materiel.est_attribue %}
+                <span class="badge badge-attribue">👤 Attribué</span>
+            {% else %}
+                <span class="badge badge-disponible">✅ Disponible</span>
+            {% endif %}
+            <span class="badge badge-{{ materiel.etat }}">
+                {% if materiel.etat == 'neuf' %}✨{% elif materiel.etat == 'bon' %}👍{% elif materiel.etat == 'usagé' %}⚠️{% else %}🔧{% endif %}
+                {{ materiel.etat | replace('_', ' ') | capitalize }}
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- Attribution actuelle -->
+{% if materiel.est_attribue %}
+<div class="card" style="border-left: 3px solid var(--accent-orange);">
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+        <span style="font-size: 28px;">👤</span>
+        <div>
+            <div style="font-size: 18px; font-weight: 700; color: var(--accent-orange);">
+                {{ materiel.attribue_a }}
+            </div>
+            <div style="color: var(--text-muted); font-size: 13px;">
+                Depuis le {{ materiel.date_attribution }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Bouton récupérer -->
+    <form method="POST" action="{{ url_for('main.recuperer', code_vigile=materiel.code_vigile) }}"
+          onsubmit="return confirm('Confirmer la récupération du matériel ?')">
+        <button type="submit" class="btn btn-warning btn-block">
+            📦 Récupérer ce matériel
+        </button>
+    </form>
+</div>
+{% else %}
+<!-- Bouton attribuer -->
+<div class="card">
+    <a href="{{ url_for('main.attribuer', code_vigile=materiel.code_vigile) }}"
+       class="btn btn-success btn-block btn-lg">
+        👤 Attribuer ce matériel
+    </a>
+</div>
+{% endif %}
+
+<!-- Informations détaillées -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title" style="font-size: 16px;">📋 Informations</h2>
+    </div>
+
+    <div class="info-row">
+        <span class="info-label">Type</span>
+        <span class="info-value">{{ materiel.type | capitalize }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Marque</span>
+        <span class="info-value">{{ materiel.marque }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Modèle</span>
+        <span class="info-value">{{ materiel.modele }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">N° Série</span>
+        <span class="info-value" style="font-family: 'Courier New', monospace;">{{ materiel.numero_serie }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">État</span>
+        <span class="info-value">
+            <span class="badge badge-{{ materiel.etat }}">
+                {{ materiel.etat | replace('_', ' ') | capitalize }}
+            </span>
+        </span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Emplacement</span>
+        <span class="info-value">{{ materiel.emplacement | replace('_', ' ') | capitalize }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Date acquisition</span>
+        <span class="info-value">{{ materiel.date_acquisition }}</span>
+    </div>
+    {% if materiel.notes and materiel.notes != '—' %}
+    <div class="info-row">
+        <span class="info-label">Notes</span>
+        <span class="info-value">{{ materiel.notes }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Historique des attributions -->
+{% if historique %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title" style="font-size: 16px;">📜 Historique</h2>
+    </div>
+
+    {% for item in historique %}
+    <div class="history-item">
+        <div class="history-dot {{ 'active' if item.is_active else 'inactive' }}"></div>
+        <div class="history-info">
+            <div class="history-name">
+                {{ item.attribue_a }}
+                {% if item.is_active %}
+                    <span class="badge badge-active" style="font-size: 10px;">En cours</span>
+                {% endif %}
+            </div>
+            <div class="history-date">
+                📅 {{ item.date_attribution }}
+                {% if item.date_retour %}
+                    → {{ item.date_retour }}
+                {% endif %}
+                · Par {{ item.attribue_par }}
+            </div>
+            {% if item.notes %}
+            <div style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">
+                💬 {{ item.notes }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Bouton retour au scanner -->
+<div class="text-center mt-2 mb-3">
+    <a href="{{ url_for('main.scan') }}" class="btn btn-outline">
+        📷 Scanner un autre matériel
+    </a>
+</div>
+{% endblock %}

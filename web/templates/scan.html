@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Scanner QR — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header text-center">
+        <h1 class="card-title">📷 Scanner un QR Code</h1>
+        <p class="card-subtitle">Pointez la caméra vers le QR code du matériel</p>
+    </div>
+
+    <!-- Zone vidéo du scanner -->
+    <div class="scanner-container" id="scanner-container">
+        <video id="scanner-video" playsinline></video>
+        <canvas id="scanner-canvas"></canvas>
+        <div class="scanner-overlay">
+            <div class="scanner-frame"></div>
+        </div>
+    </div>
+
+    <div class="scanner-status" id="scanner-status">
+        Initialisation de la caméra...
+    </div>
+</div>
+
+<!-- Saisie manuelle -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title" style="font-size: 16px;">⌨️ Saisie manuelle</h2>
+        <p class="card-subtitle">Ou entrez le code VIGILE directement</p>
+    </div>
+
+    <form id="manual-form" onsubmit="rechercheManuelle(event)">
+        <div class="form-group">
+            <input type="text" id="code-input" class="form-input"
+                   placeholder="Ex: VIG-2026-0001" autocomplete="off">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">
+            🔍 Rechercher
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- jsQR : Décodeur QR pur JavaScript -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+<script>
+    // =============================================================
+    // VIGILE — Scanner QR avec caméra
+    // Utilise jsQR pour décoder les QR codes en temps réel
+    // =============================================================
+
+    const video = document.getElementById('scanner-video');
+    const canvas = document.getElementById('scanner-canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const statusEl = document.getElementById('scanner-status');
+    let scanning = true;
+    let lastScannedCode = '';
+    let scanCooldown = false;
+
+    /**
+     * Démarre la caméra arrière du téléphone
+     */
+    async function demarrerCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'environment',  // Caméra arrière
+                    width: { ideal: 720 },
+                    height: { ideal: 720 }
+                }
+            });
+
+            video.srcObject = stream;
+            video.setAttribute('playsinline', true);
+            await video.play();
+            statusEl.textContent = '🔍 Recherche d\'un QR code...';
+            scannerLoop();
+
+        } catch (err) {
+            console.error('Erreur caméra :', err);
+            statusEl.innerHTML = `
+                <span style="color: var(--accent-red);">
+                    ⚠️ Impossible d'accéder à la caméra.<br>
+                    <small>Vérifiez les permissions ou utilisez la saisie manuelle.</small>
+                </span>
+            `;
+        }
+    }
+
+    /**
+     * Boucle de scan : capture une frame et tente de décoder un QR
+     */
+    function scannerLoop() {
+        if (!scanning) return;
+
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: 'dontInvert'
+            });
+
+            if (code && code.data && !scanCooldown) {
+                onQRDetected(code.data);
+            }
+        }
+
+        requestAnimationFrame(scannerLoop);
+    }
+
+    /**
+     * Callback quand un QR code est détecté
+     */
+    function onQRDetected(data) {
+        // Éviter les scans multiples du même code
+        if (data === lastScannedCode) return;
+        lastScannedCode = data;
+        scanCooldown = true;
+
+        console.log('[VIGILE] QR détecté :', data);
+        statusEl.innerHTML = `
+            <span style="color: var(--accent-green); font-weight: 600;">
+                ✅ QR Code détecté !
+            </span>
+        `;
+
+        // Vibration feedback (si supporté)
+        if (navigator.vibrate) {
+            navigator.vibrate(200);
+        }
+
+        // Extraire le code VIGILE de l'URL ou utiliser directement
+        let codeVigile = data;
+
+        // Si c'est une URL VIGILE, extraire le code
+        const match = data.match(/\/materiel\/(VIG-\d{4}-\d{4})/);
+        if (match) {
+            codeVigile = match[1];
+        }
+
+        // Vérifier si c'est un code VIGILE valide
+        if (codeVigile.match(/^VIG-\d{4}-\d{4}$/)) {
+            // Rediriger vers la fiche matériel
+            setTimeout(() => {
+                window.location.href = '/materiel/' + codeVigile;
+            }, 500);
+        } else {
+            // Tenter de suivre l'URL directement si c'est une URL complète
+            if (data.includes('/materiel/')) {
+                setTimeout(() => {
+                    window.location.href = data;
+                }, 500);
+            } else {
+                statusEl.innerHTML = `
+                    <span style="color: var(--accent-orange);">
+                        ⚠️ QR code non reconnu comme matériel VIGILE.
+                    </span>
+                `;
+                scanCooldown = false;
+                lastScannedCode = '';
+            }
+        }
+    }
+
+    /**
+     * Recherche manuelle par code VIGILE
+     */
+    function rechercheManuelle(event) {
+        event.preventDefault();
+        const code = document.getElementById('code-input').value.trim();
+        if (code) {
+            window.location.href = '/materiel/' + code;
+        }
+    }
+
+    // Démarrer la caméra au chargement
+    document.addEventListener('DOMContentLoaded', demarrerCamera);
+</script>
+{% endblock %}

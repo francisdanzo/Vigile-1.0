@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Connexion — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 140px);">
+    <div style="width: 100%; max-width: 380px;">
+        <!-- Logo et titre -->
+        <div class="text-center mb-3">
+            <div style="font-size: 56px; margin-bottom: 8px;">🛡</div>
+            <h1 style="font-size: 32px; font-weight: 800; background: linear-gradient(135deg, var(--accent), #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                {{ app_name }}
+            </h1>
+            <p style="color: var(--gold); font-style: italic; font-size: 14px; margin-top: 4px;">
+                {{ app_slogan }}
+            </p>
+        </div>
+
+        <!-- Carte de connexion -->
+        <div class="card">
+            <div class="card-header text-center">
+                <h2 class="card-title">Connexion</h2>
+                <p class="card-subtitle">Accédez à votre espace VIGILE</p>
+            </div>
+
+            <form method="POST" action="{{ url_for('auth.login') }}">
+                <div class="form-group">
+                    <label for="username" class="form-label">Nom d'utilisateur</label>
+                    <input type="text" id="username" name="username" class="form-input"
+                           placeholder="Votre identifiant" required autofocus
+                           autocomplete="username">
+                </div>
+
+                <div class="form-group">
+                    <label for="password" class="form-label">Mot de passe</label>
+                    <input type="password" id="password" name="password" class="form-input"
+                           placeholder="••••••••" required
+                           autocomplete="current-password">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block btn-lg mt-2">
+                    Se connecter
+                </button>
+            </form>
+        </div>
+
+        <p class="text-center text-muted mt-2" style="font-size: 12px;">
+            v{{ app_version }}
+        </p>
+    </div>
+</div>
+{% endblock %}
