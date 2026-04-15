@@ -205,42 +205,49 @@ class VigileEntry(tk.Frame):
         self.entry.pack(fill="x")
 
         # Placeholder
+        self._is_placeholder_active = False
         if placeholder:
             self._placeholder = placeholder
+            self._is_placeholder_active = True
             self.entry.insert(0, placeholder)
             self.entry.config(fg=COLORS["text_muted"])
             self.entry.bind("<FocusIn>", self._on_focus_in)
             self.entry.bind("<FocusOut>", self._on_focus_out)
 
     def _on_focus_in(self, event):
-        if self.entry.get() == self._placeholder:
+        if self._is_placeholder_active:
             self.entry.delete(0, "end")
             self.entry.config(fg=COLORS["text_primary"])
+            self._is_placeholder_active = False
 
     def _on_focus_out(self, event):
         if not self.entry.get():
+            self._is_placeholder_active = True
             self.entry.insert(0, self._placeholder)
             self.entry.config(fg=COLORS["text_muted"])
 
     def get(self):
         """Retourne la valeur saisie (ignore le placeholder)."""
-        val = self.entry.get()
-        if hasattr(self, "_placeholder") and val == self._placeholder:
+        if getattr(self, "_is_placeholder_active", False):
             return ""
-        return val
+        return self.entry.get()
 
     def set(self, value):
         """Définit la valeur du champ."""
         self.entry.delete(0, "end")
         self.entry.insert(0, value)
         self.entry.config(fg=COLORS["text_primary"])
+        self._is_placeholder_active = False
 
     def clear(self):
         """Vide le champ."""
         self.entry.delete(0, "end")
         if hasattr(self, "_placeholder"):
+            self._is_placeholder_active = True
             self.entry.insert(0, self._placeholder)
             self.entry.config(fg=COLORS["text_muted"])
+        else:
+            self._is_placeholder_active = False
 
 
 # =============================================================================
