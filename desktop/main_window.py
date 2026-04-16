@@ -585,6 +585,8 @@ class ServerFrame(tk.Frame):
         self.flask_app = flask_app
         self.server_thread = None
         self.server_running = False
+        self.tunnel = None  # Instance CloudflareTunnel
+        self.tunnel_running = False
         self._construire_interface()
 
     def _get_ip_locale(self):
@@ -599,92 +601,129 @@ class ServerFrame(tk.Frame):
             return "127.0.0.1"
 
     def _construire_interface(self):
-        """Construit l'interface de contrôle du serveur."""
-        # Titre
         tk.Label(
-            self, text="🌐 Serveur Web",
+            self, text="🌐 Serveur Web & Tunnel",
             bg=COLORS["bg_dark"], fg=COLORS["text_primary"],
             font=("Segoe UI", 22, "bold"), anchor="w"
         ).pack(fill="x", padx=30, pady=(25, 20))
 
-        # Carte principale
-        card = tk.Frame(self, bg=COLORS["bg_card"])
-        card.pack(fill="x", padx=30, pady=10)
+        # ── Carte serveur local ──────────────────────────────────────────
+        card_local = tk.Frame(self, bg=COLORS["bg_card"])
+        card_local.pack(fill="x", padx=30, pady=(0, 10))
+        inner = tk.Frame(card_local, bg=COLORS["bg_card"])
+        inner.pack(fill="x", padx=25, pady=20)
 
-        content = tk.Frame(card, bg=COLORS["bg_card"])
-        content.pack(fill="x", padx=30, pady=25)
+        tk.Label(inner, text="📡 Réseau local (WiFi)",
+                 bg=COLORS["bg_card"], fg=COLORS["text_secondary"],
+                 font=("Segoe UI", 11, "bold"), anchor="w").pack(fill="x")
 
-        # État du serveur
         self.status_label = tk.Label(
-            content, text="● Serveur arrêté",
+            inner, text="● Serveur arrêté",
             bg=COLORS["bg_card"], fg=COLORS["accent_red"],
-            font=("Segoe UI", 16, "bold"), anchor="w"
+            font=("Segoe UI", 14, "bold"), anchor="w"
         )
-        self.status_label.pack(fill="x", pady=(0, 15))
+        self.status_label.pack(fill="x", pady=(6, 2))
 
-        # IP et port
         ip = self._get_ip_locale()
-        self.url_label = tk.Label(
-            content,
-            text=f"URL : http://{ip}:{FLASK_PORT}",
+        self.url_label_local = tk.Label(
+            inner, text=f"http://{ip}:{FLASK_PORT}",
             bg=COLORS["bg_card"], fg=COLORS["text_secondary"],
-            font=("Consolas", 13), anchor="w"
+            font=("Consolas", 12), anchor="w"
         )
-        self.url_label.pack(fill="x", pady=(0, 5))
+        self.url_label_local.pack(fill="x", pady=(0, 12))
 
-        tk.Label(
-            content,
-            text=f"Port : {FLASK_PORT}  |  IP locale : {ip}",
-            bg=COLORS["bg_card"], fg=COLORS["text_muted"],
-            font=("Segoe UI", 10), anchor="w"
-        ).pack(fill="x", pady=(0, 20))
-
-        # Boutons
-        btn_frame = tk.Frame(content, bg=COLORS["bg_card"])
-        btn_frame.pack(fill="x")
-
+        btn_srv = tk.Frame(inner, bg=COLORS["bg_card"])
+        btn_srv.pack(fill="x")
         self.btn_start = VigileButton(
-            btn_frame, text="▶ Démarrer le serveur",
-            command=self._demarrer_serveur,
-            width=220, height=44, color=COLORS["accent_green"]
+            btn_srv, text="▶ Démarrer", command=self._demarrer_serveur,
+            width=160, height=38, color=COLORS["accent_green"]
         )
-        self.btn_start.pack(side="left", padx=(0, 10))
-
+        self.btn_start.pack(side="left", padx=(0, 8))
         self.btn_stop = VigileButton(
-            btn_frame, text="⏹ Arrêter le serveur",
-            command=self._arreter_serveur,
-            width=220, height=44, color=COLORS["accent_red"]
+            btn_srv, text="⏹ Arrêter", command=self._arreter_serveur,
+            width=160, height=38, color=COLORS["accent_red"]
         )
         self.btn_stop.pack(side="left")
 
-        # Zone QR code du serveur
-        qr_frame = tk.Frame(self, bg=COLORS["bg_card"])
-        qr_frame.pack(fill="x", padx=30, pady=(15, 10))
+        # ── Carte tunnel public ──────────────────────────────────────────
+        card_tunnel = tk.Frame(
+            self, bg=COLORS["bg_card"],
+            highlightbackground=COLORS["accent"],
+            highlightthickness=1
+        )
+        card_tunnel.pack(fill="x", padx=30, pady=(0, 10))
+        inner_t = tk.Frame(card_tunnel, bg=COLORS["bg_card"])
+        inner_t.pack(fill="x", padx=25, pady=20)
+
+        hdr = tk.Frame(inner_t, bg=COLORS["bg_card"])
+        hdr.pack(fill="x")
+        tk.Label(hdr, text="☁ Accès internet public (Cloudflare Tunnel)",
+                 bg=COLORS["bg_card"], fg=COLORS["accent"],
+                 font=("Segoe UI", 11, "bold"), anchor="w").pack(side="left")
+        tk.Label(hdr, text="✦ Gratuit, sans compte",
+                 bg=COLORS["bg_card"], fg=COLORS["accent_green"],
+                 font=("Segoe UI", 9), anchor="e").pack(side="right")
+
+        self.tunnel_status_label = tk.Label(
+            inner_t, text="● Tunnel inactif",
+            bg=COLORS["bg_card"], fg=COLORS["text_muted"],
+            font=("Segoe UI", 13, "bold"), anchor="w"
+        )
+        self.tunnel_status_label.pack(fill="x", pady=(8, 2))
+
+        self.tunnel_url_label = tk.Label(
+            inner_t,
+            text="Démarrez le serveur puis activez le tunnel",
+            bg=COLORS["bg_card"], fg=COLORS["text_muted"],
+            font=("Consolas", 11), anchor="w", cursor="hand2"
+        )
+        self.tunnel_url_label.pack(fill="x", pady=(0, 4))
+        self.tunnel_url_label.bind("<Button-1>", self._copier_url_tunnel)
 
         tk.Label(
-            qr_frame, text="📱 QR Code d'accès mobile",
-            bg=COLORS["bg_card"], fg=COLORS["text_primary"],
-            font=("Segoe UI", 14, "bold")
-        ).pack(pady=(15, 10))
+            inner_t,
+            text="Cliquez sur l'URL pour la copier  ·  QR scannable depuis n'importe quel réseau",
+            bg=COLORS["bg_card"], fg=COLORS["text_muted"],
+            font=("Segoe UI", 9), anchor="w"
+        ).pack(fill="x", pady=(0, 10))
 
+        btn_t = tk.Frame(inner_t, bg=COLORS["bg_card"])
+        btn_t.pack(fill="x")
+        self.btn_tunnel_start = VigileButton(
+            btn_t, text="☁ Activer le tunnel", command=self._demarrer_tunnel,
+            width=190, height=38, color=COLORS["accent"]
+        )
+        self.btn_tunnel_start.pack(side="left", padx=(0, 8))
+        self.btn_tunnel_stop = VigileButton(
+            btn_t, text="✕ Désactiver", command=self._arreter_tunnel,
+            width=150, height=38, color=COLORS["bg_card"]
+        )
+        self.btn_tunnel_stop.pack(side="left")
+        self.btn_dl = VigileButton(
+            btn_t, text="⬇ Installer cloudflared", command=self._telecharger_cloudflared,
+            width=200, height=38, color=COLORS["accent_orange"]
+        )
+
+        # Vérifier si cloudflared est déjà présent
+        from tunnel import _get_cloudflared_path
+        if not os.path.exists(_get_cloudflared_path()):
+            self.btn_dl.pack(side="left", padx=(8, 0))
+
+        # ── Zone QR ──────────────────────────────────────────────────────
+        qr_frame = tk.Frame(self, bg=COLORS["bg_card"])
+        qr_frame.pack(fill="x", padx=30, pady=(0, 15))
+        tk.Label(
+            qr_frame, text="📱 QR Code d'accès",
+            bg=COLORS["bg_card"], fg=COLORS["text_primary"],
+            font=("Segoe UI", 13, "bold")
+        ).pack(pady=(15, 8))
         self.qr_label = tk.Label(
-            qr_frame, text="Démarrez le serveur pour générer le QR code",
+            qr_frame,
+            text="Démarrez le serveur pour générer le QR code",
             bg=COLORS["bg_card"], fg=COLORS["text_muted"],
             font=("Segoe UI", 10)
         )
         self.qr_label.pack(pady=(0, 15))
-
-        # Info
-        info_frame = tk.Frame(self, bg=COLORS["bg_dark"])
-        info_frame.pack(fill="x", padx=30, pady=15)
-
-        tk.Label(
-            info_frame,
-            text="ℹ Le serveur web permet aux utilisateurs de scanner les QR codes\n"
-                 "depuis leur téléphone sur le même réseau WiFi.",
-            bg=COLORS["bg_dark"], fg=COLORS["text_secondary"],
-            font=("Segoe UI", 10), justify="left", anchor="w"
-        ).pack(fill="x")
 
     def _demarrer_serveur(self):
         """Démarre le serveur Flask dans un thread séparé."""
@@ -720,13 +759,9 @@ class ServerFrame(tk.Frame):
                 text="● Serveur en cours d'exécution",
                 fg=COLORS["accent_green"]
             )
-            self.url_label.config(
-                text=f"URL : http://{ip}:{FLASK_PORT}",
-                fg=COLORS["accent_green"]
-            )
-
-            # Générer le QR code du serveur
-            self._generer_qr_serveur(ip)
+            # URL locale toujours affichée
+            ip = self._get_ip_locale()
+            self._generer_qr_serveur_url(f"http://{ip}:{FLASK_PORT}")
 
             print(f"[VIGILE] Serveur Flask démarré sur http://{ip}:{FLASK_PORT}")
 
@@ -752,33 +787,136 @@ class ServerFrame(tk.Frame):
         )
         print("[VIGILE] Serveur Flask arrêté.")
 
-    def _generer_qr_serveur(self, ip):
-        """Génère un QR code pointant vers l'URL du serveur."""
+    def _demarrer_tunnel(self):
+        """Lance le Cloudflare Tunnel."""
+        if not self.server_running:
+            messagebox.showwarning(
+                "Tunnel", "Démarrez d'abord le serveur local avant d'activer le tunnel."
+            )
+            return
+
+        from tunnel import CloudflareTunnel, telecharger_cloudflared, _get_cloudflared_path
+        if not os.path.exists(_get_cloudflared_path()):
+            messagebox.showinfo(
+                "cloudflared manquant",
+                "cloudflared n'est pas installé.\nCliquez sur 'Installer cloudflared' d'abord."
+            )
+            return
+
+        self.tunnel_status_label.config(
+            text="⏳ Connexion au réseau Cloudflare...",
+            fg=COLORS["accent_orange"]
+        )
+        self.tunnel_url_label.config(text="Génération de l'URL en cours...")
+
+        self.tunnel = CloudflareTunnel(port=FLASK_PORT)
+
+        def on_url(url):
+            # Appelé depuis le thread tunnel — utiliser after() pour Tkinter
+            self.after(0, lambda: self._on_tunnel_url(url))
+
+        def on_erreur(msg):
+            self.after(0, lambda: self._on_tunnel_erreur(msg))
+
+        self.tunnel.demarrer(callback_url=on_url, callback_erreur=on_erreur)
+        self.tunnel_running = True
+
+    def _on_tunnel_url(self, url: str):
+        """Appelé quand l'URL du tunnel est disponible."""
+        self.tunnel_status_label.config(
+            text="● Tunnel actif — Accès mondial HTTPS",
+            fg=COLORS["accent_green"]
+        )
+        self.tunnel_url_label.config(
+            text=url, fg=COLORS["accent_green"]
+        )
+        # Générer le QR avec l'URL publique (remplace le QR local)
+        self._generer_qr_serveur_url(url)
+        print(f"[VIGILE] Tunnel actif : {url}")
+
+    def _on_tunnel_erreur(self, msg: str):
+        """Appelé en cas d'erreur du tunnel."""
+        self.tunnel_status_label.config(
+            text=f"● Erreur tunnel", fg=COLORS["accent_red"]
+        )
+        self.tunnel_url_label.config(
+            text=msg, fg=COLORS["accent_red"]
+        )
+        self.tunnel_running = False
+
+    def _arreter_tunnel(self):
+        """Arrête le Cloudflare Tunnel."""
+        if self.tunnel:
+            self.tunnel.arreter()
+            self.tunnel = None
+        self.tunnel_running = False
+        self.tunnel_status_label.config(
+            text="● Tunnel inactif", fg=COLORS["text_muted"]
+        )
+        self.tunnel_url_label.config(
+            text="Tunnel arrêté", fg=COLORS["text_muted"]
+        )
+
+    def _copier_url_tunnel(self, event=None):
+        """Copie l'URL du tunnel dans le presse-papiers."""
+        if self.tunnel and self.tunnel.url:
+            self.clipboard_clear()
+            self.clipboard_append(self.tunnel.url)
+            self.tunnel_url_label.config(text=f"✓ Copié ! {self.tunnel.url}")
+            self.after(2000, lambda: self.tunnel_url_label.config(text=self.tunnel.url))
+
+    def _telecharger_cloudflared(self):
+        """Lance le téléchargement de cloudflared avec feedback visuel."""
+        from tunnel import telecharger_cloudflared
+        self.btn_dl._active_color = COLORS["text_muted"]
+        self.btn_dl._draw()
+
+        def _dl():
+            def progression(msg):
+                self.after(0, lambda m=msg: self.tunnel_status_label.config(
+                    text=m, fg=COLORS["accent_orange"]
+                ))
+            ok = telecharger_cloudflared(callback_progression=progression)
+            if ok:
+                self.after(0, lambda: [
+                    self.tunnel_status_label.config(
+                        text="✓ cloudflared installé — Prêt à activer",
+                        fg=COLORS["accent_green"]
+                    ),
+                    self.btn_dl.pack_forget()
+                ])
+            else:
+                self.after(0, lambda: self.tunnel_status_label.config(
+                    text="Échec du téléchargement — Vérifiez internet",
+                    fg=COLORS["accent_red"]
+                ))
+
+        threading.Thread(target=_dl, daemon=True).start()
+
+    def _generer_qr_serveur_url(self, url: str):
+        """Génère un QR code pour une URL donnée (locale ou tunnel)."""
         try:
-            from qr.generator import generer_qr_code
             from PIL import Image, ImageTk
-
-            # Générer un QR spécial pour l'URL du serveur
-            url = f"http://{ip}:{FLASK_PORT}"
-
             import qrcode as qr_lib
-            qr = qr_lib.QRCode(box_size=6, border=2)
+            qr = qr_lib.QRCode(box_size=5, border=2)
             qr.add_data(url)
             qr.make(fit=True)
             img = qr.make_image(fill_color="#6c63ff", back_color="#1c1c2e")
             img = img.convert("RGB")
-            img = img.resize((200, 200), Image.NEAREST)
-
-            # Convertir pour Tkinter
+            img = img.resize((180, 180), Image.NEAREST)
             self._qr_photo = ImageTk.PhotoImage(img)
             self.qr_label.config(
                 image=self._qr_photo,
                 text=f"\n{url}",
                 compound="top",
-                fg=COLORS["text_secondary"]
+                fg=COLORS["accent_green"] if "trycloudflare" in url else COLORS["text_secondary"]
             )
         except Exception as e:
-            self.qr_label.config(text=f"QR : {e}")
+            self.qr_label.config(text=f"QR : {url}\n({e})")
+
+    def _generer_qr_serveur(self, ip):
+        """Obsolète : remplacé par _generer_qr_serveur_url."""
+        self._generer_qr_serveur_url(f"http://{ip}:{FLASK_PORT}")
 
     def set_flask_app(self, app):
         """Définit l'application Flask à utiliser."""
