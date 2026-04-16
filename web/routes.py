@@ -22,9 +22,13 @@ from flask_login import login_required, current_user
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import SECRET_KEY, APP_NAME, APP_SLOGAN, APP_VERSION
+from config import (
+    SECRET_KEY, APP_NAME, APP_SLOGAN, APP_VERSION,
+    TYPES_MATERIEL, ETATS_MATERIEL, EMPLACEMENTS_MATERIEL, FLASK_PORT
+)
 from database import get_session
 from models import Materiel, Attribution, User
+from qr.generator import generer_qr_code, generer_code_vigile
 
 # =============================================================================
 # Blueprint principal
@@ -249,6 +253,227 @@ def recuperer(code_vigile):
         return redirect(url_for("main.fiche_materiel", code_vigile=code_vigile))
     finally:
         session.close()
+
+
+# =============================================================================
+# Gestion de l'inventaire
+# =============================================================================
+
+@main_bp.route("/inventaire")
+@login_required
+def inventaire():
+    """Liste complète du matériel avec recherche et filtres."""
+    session = get_session()
+    try:
+        query = session.query(Materiel)
+
+        # Filtres
+        type_f = request.args.get("type")
+        if type_f and type_f in TYPES_MATERIEL:
+            query = query.filter(Materiel.type == type_f)
+
+        etat_f = request.args.get("etat")
+        if etat_f and etat_f in ETATS_MATERIEL:
+            query = query.filter(Materiel.etat == etat_f)
+
+        empl_f = request.args.get("emplacement")
+        if empl_f and empl_f in EMPLACEMENTS_MATERIEL:
+            query = query.filter(Materiel.emplacement == empl_f)
+
+        # Recherche
+        q = request.args.get("q", "").strip()
+        if q:
+            query = query.filter(
+                (Materiel.code_vigile.ilike(f"%{q}%")) |
+                (Materiel.marque.ilike(f"%{q}%")) |
+                (Materiel.modele.ilike(f"%{q}%")) |
+                (Materiel.numero_serie.ilike(f"%{q}%"))
+            )
+
+        materiels = query.order_by(Materiel.created_at.desc()).all()
+
+        return render_template(
+            "inventory.html",
+            materiels=materiels,
+            types=TYPES_MATERIEL,
+            etats=ETATS_MATERIEL,
+            emplacements=EMPLACEMENTS_MATERIEL,
+            filters={
+                "type": type_f,
+                "etat": etat_f,
+                "emplacement": empl_f,
+                "q": q
+            }
+        )
+    finally:
+        session.close()
+
+
+@main_bp.route("/inventaire/ajouter", methods=["GET", "POST"])
+@login_required
+def ajouter_materiel():
+    """Ajout d'un nouveau matériel."""
+    session = get_session()
+    try:
+        if request.method == "POST":
+            # Extraire les données du formulaire
+            type_mat = request.form.get("type")
+            marque = request.form.get("marque", "").strip()
+            modele = request.form.get("modele", "").strip()
+            serie = request.form.get("numero_serie", "").strip()
+            etat = request.form.get("etat")
+            emplacement = request.form.get("emplacement")
+            notes = request.form.get("notes", "").strip()
+            date_acq_str = request.form.get("date_acquisition", "").strip()
+
+            # Validation
+            if not type_mat or not etat or not emplacement:
+                flash("Veuillez remplir tous les champs obligatoires.", "error")
+                return render_template(
+                    "form_materiel.html",
+                    action="ajouter",
+                    types=TYPES_MATERIEL,
+                    etats=ETATS_MATERIEL,
+                    emplacements=EMPLACEMENTS_MATERIEL
+                )
+
+            date_acq = None
+            if date_acq_str:
+                try:
+                    date_acq = datetime.strptime(date_acq_str, "%Y-%m-%d")
+                    date_acq = date_acq.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    pass
+
+            # Créer le matériel
+            code_vigile = generer_code_vigile(session)
+            materiel = Materiel(
+                code_vigile=code_vigile,
+                type=type_mat,
+                marque=marque if marque else None,
+                modele=modele if modele else None,
+                numero_serie=serie if serie else None,
+                etat=etat,
+                emplacement=emplacement,
+                date_acquisition=date_acq,
+                notes=notes if notes else None,
+                created_by=current_user.id
+            )
+
+            session.add(materiel)
+            session.flush()
+
+            # Générer le QR code
+            import socket
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                ip = "127.0.0.1"
+
+            qr_path = generer_qr_code(code_vigile, host=ip, port=FLASK_PORT)
+            materiel.qr_code_path = qr_path
+
+            session.commit()
+            flash(f"✅ Matériel {code_vigile} ajouté avec succès !", "success")
+            return redirect(url_for("main.fiche_materiel", code_vigile=code_vigile))
+
+        return render_template(
+            "form_materiel.html",
+            action="ajouter",
+            types=TYPES_MATERIEL,
+            etats=ETATS_MATERIEL,
+            emplacements=EMPLACEMENTS_MATERIEL
+        )
+    except Exception as e:
+        session.rollback()
+        flash(f"Erreur lors de l'ajout : {e}", "error")
+        return redirect(url_for("main.inventaire"))
+    finally:
+        session.close()
+
+
+@main_bp.route("/inventaire/modifier/<int:mat_id>", methods=["GET", "POST"])
+@login_required
+def modifier_materiel(mat_id):
+    """Modification d'un matériel existant."""
+    session = get_session()
+    try:
+        materiel = session.query(Materiel).get(mat_id)
+        if not materiel:
+            flash("Matériel introuvable.", "error")
+            return redirect(url_for("main.inventaire"))
+
+        if request.method == "POST":
+            materiel.type = request.form.get("type")
+            materiel.marque = request.form.get("marque", "").strip() or None
+            materiel.modele = request.form.get("modele", "").strip() or None
+            materiel.numero_serie = request.form.get("numero_serie", "").strip() or None
+            materiel.etat = request.form.get("etat")
+            materiel.emplacement = request.form.get("emplacement")
+            materiel.notes = request.form.get("notes", "").strip() or None
+
+            date_acq_str = request.form.get("date_acquisition", "").strip()
+            if date_acq_str:
+                try:
+                    date_acq = datetime.strptime(date_acq_str, "%Y-%m-%d")
+                    materiel.date_acquisition = date_acq.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    pass
+
+            session.commit()
+            flash(f"✅ Matériel {materiel.code_vigile} mis à jour.", "success")
+            return redirect(url_for("main.fiche_materiel", code_vigile=materiel.code_vigile))
+
+        return render_template(
+            "form_materiel.html",
+            action="modifier",
+            materiel=materiel,
+            types=TYPES_MATERIEL,
+            etats=ETATS_MATERIEL,
+            emplacements=EMPLACEMENTS_MATERIEL
+        )
+    except Exception as e:
+        session.rollback()
+        flash(f"Erreur lors de la modification : {e}", "error")
+        return redirect(url_for("main.inventaire"))
+    finally:
+        session.close()
+
+
+@main_bp.route("/inventaire/supprimer/<int:mat_id>", methods=["POST"])
+@login_required
+def supprimer_materiel(mat_id):
+    """Suppression d'un matériel."""
+    session = get_session()
+    try:
+        materiel = session.query(Materiel).get(mat_id)
+        if not materiel:
+            flash("Matériel introuvable.", "error")
+            return redirect(url_for("main.inventaire"))
+
+        code = materiel.code_vigile
+        
+        # Supprimer le fichier QR code s'il existe
+        if materiel.qr_code_path and os.path.exists(materiel.qr_code_path):
+            try:
+                os.remove(materiel.qr_code_path)
+            except Exception:
+                pass
+
+        session.delete(materiel)
+        session.commit()
+        flash(f"🗑 Matériel {code} supprimé avec succès.", "success")
+    except Exception as e:
+        session.rollback()
+        flash(f"Erreur lors de la suppression : {e}", "error")
+    finally:
+        session.close()
+    return redirect(url_for("main.inventaire"))
+
+
 
 
 # =============================================================================

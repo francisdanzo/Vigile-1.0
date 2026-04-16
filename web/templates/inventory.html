@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Inventaire — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="inventory-container animate-fade-in">
+    <!-- Header -->
+    <div class="row align-items-center mb-4">
+        <div class="col">
+            <h1 class="h2 mb-0">📋 Inventaire</h1>
+            <p class="text-secondary small mb-0">Gestion complète de votre parc matériel</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('main.ajouter_materiel') }}" class="btn btn-accent d-flex align-items-center">
+                <span class="me-2">➕</span> Ajouter
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters & Search -->
+    <div class="card glass mb-4 p-3">
+        <form method="GET" action="{{ url_for('main.inventaire') }}" class="row g-3">
+            <div class="col-12 col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text bg-transparent border-end-0 text-muted">🔍</span>
+                    <input type="text" name="q" class="form-control border-start-0" 
+                           placeholder="Rechercher (Code, Marque, SN...)" value="{{ filters.q }}">
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <select name="type" class="form-select" onchange="this.form.submit()">
+                    <option value="">Tous les types</option>
+                    {% for t in types %}
+                        <option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ t|capitalize }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <select name="etat" class="form-select" onchange="this.form.submit()">
+                    <option value="">Tous les états</option>
+                    {% for e in etats %}
+                        <option value="{{ e }}" {% if filters.etat == e %}selected{% endif %}>{{ e|capitalize }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <select name="emplacement" class="form-select" onchange="this.form.submit()">
+                    <option value="">Tous les lieux</option>
+                    {% for l in emplacements %}
+                        <option value="{{ l }}" {% if filters.emplacement == l %}selected{% endif %}>{{ l|capitalize }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-2 d-grid">
+                <a href="{{ url_for('main.inventaire') }}" class="btn btn-outline-secondary">Effacer</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Inventory List -->
+    <div class="card glass overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-dark-subtle">
+                    <tr>
+                        <th class="ps-4">Code</th>
+                        <th>Détails</th>
+                        <th>État</th>
+                        <th>Lieu</th>
+                        <th>Statut</th>
+                        <th class="text-end pe-4">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mat in materiels %}
+                    <tr>
+                        <td class="ps-4">
+                            <span class="font-monospace text-accent fw-bold">{{ mat.code_vigile }}</span>
+                        </td>
+                        <td>
+                            <div class="fw-bold">{{ mat.type|capitalize }}</div>
+                            <div class="text-secondary small">
+                                {{ mat.marque or '' }} {{ mat.modele or '' }}
+                                {% if mat.numero_serie %}
+                                <span class="badge bg-secondary-subtle text-secondary ms-1">{{ mat.numero_serie }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge rounded-pill 
+                                {% if mat.etat == 'neuf' %}bg-success-subtle text-success
+                                {% elif mat.etat == 'bon' %}bg-info-subtle text-info
+                                {% elif mat.etat == 'usagé' %}bg-warning-subtle text-warning
+                                {% else %}bg-danger-subtle text-danger{% endif %}">
+                                {{ mat.etat|capitalize }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="small text-secondary">📍 {{ mat.emplacement|capitalize }}</span>
+                        </td>
+                        <td>
+                            {% set attr = mat.attribution_active %}
+                            {% if attr %}
+                                <div class="badge bg-warning-subtle text-warning">Personnalisé</div>
+                                <div class="small text-secondary mt-1">👤 {{ attr.attribue_a }}</div>
+                            {% else %}
+                                <div class="badge bg-success-subtle text-success">Disponible</div>
+                            {% endif %}
+                        </td>
+                        <td class="text-end pe-4">
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('main.fiche_materiel', code_vigile=mat.code_vigile) }}" 
+                                   class="btn btn-outline-info" title="Voir">👁</a>
+                                <a href="{{ url_for('main.modifier_materiel', mat_id=mat.id) }}" 
+                                   class="btn btn-outline-warning" title="Modifier">✏️</a>
+                                <button type="button" class="btn btn-outline-danger" 
+                                        onclick="confirmDelete('{{ mat.id }}', '{{ mat.code_vigile }}')" title="Supprimer">🗑</button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <div class="h4">Aucun matériel trouvé</div>
+                            <p>Ajustez vos filtres ou <a href="{{ url_for('main.ajouter_materiel') }}">ajoutez un nouvel équipement</a>.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="card glass border-danger">
+            <div class="card-body p-4 text-center">
+                <div class="display-4 text-danger mb-3">⚠️</div>
+                <h3 class="mb-3">Supprimer le matériel ?</h3>
+                <p class="text-secondary mb-4">
+                    Êtes-vous sûr de vouloir supprimer définitivement <strong id="deleteTargetCode"></strong> ? 
+                    Cette action est irréversible.
+                </p>
+                <form id="deleteForm" method="POST">
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary w-100" data-bs-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-danger w-100">Supprimer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDelete(id, code) {
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    document.getElementById('deleteTargetCode').textContent = code;
+    document.getElementById('deleteForm').action = "/inventaire/supprimer/" + id;
+    modal.show();
+}
+</script>
+
+<style>
+.inventory-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+.table-hover tbody tr:hover {
+    background-color: rgba(108, 99, 255, 0.05);
+}
+.text-accent {
+    color: var(--accent-color);
+}
+</style>
+{% endblock %}

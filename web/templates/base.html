@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="VIGILE — Système de gestion et traçabilité de matériel informatique">
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         /* =============================================================
            VIGILE — Design System CSS
@@ -41,6 +43,36 @@
             --radius: 12px;
             --radius-sm: 8px;
             --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            --accent-color: #6c63ff;
+        }
+
+        .glass {
+            background: rgba(18, 18, 31, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: var(--radius);
+        }
+
+        .btn-accent {
+            background: var(--accent);
+            color: white;
+            border: none;
+            transition: var(--transition);
+        }
+        .btn-accent:hover {
+            background: var(--accent-hover);
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(108, 99, 255, 0.3);
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         /* --- Reset & Base --- */
@@ -566,9 +598,10 @@
                 <span class="brand-name">{{ app_name }}</span>
             </a>
             <div class="navbar-actions">
-                <a href="{{ url_for('main.scan') }}" class="nav-link {% if request.path == '/scan' %}active{% endif %}">📷 Scanner</a>
-                <span class="navbar-user">👤 {{ current_user.username }}</span>
-                <a href="{{ url_for('auth.logout') }}" class="nav-link">Déconnexion</a>
+                <a href="{{ url_for('main.scan') }}" class="nav-link {% if request.path == url_for('main.scan') %}active{% endif %}">📷 Scanner</a>
+                <a href="{{ url_for('main.inventaire') }}" class="nav-link {% if 'inventaire' in request.path %}active{% endif %}">📋 Inventaire</a>
+                <span class="navbar-user d-none d-md-inline">👤 {{ current_user.username }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="nav-link text-danger-hover">Déconnexion</a>
             </div>
         </div>
     </nav>
@@ -597,6 +630,8 @@
         <strong>{{ app_name }}</strong> v{{ app_version }} — {{ app_slogan }}
     </footer>
 
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     {% block scripts %}{% endblock %}
     
     <script>
