@@ -15,8 +15,16 @@ import sys
 from datetime import datetime, timezone
 
 from flask import (
-    Flask, Blueprint, render_template, request,
-    redirect, url_for, flash, jsonify
+    Flask,
+    Blueprint,
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
 )
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
@@ -25,7 +33,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import (
     SECRET_KEY, APP_NAME, APP_SLOGAN, APP_VERSION,
-    TYPES_MATERIEL, ETATS_MATERIEL, EMPLACEMENTS_MATERIEL, FLASK_PORT
+    TYPES_MATERIEL, ETATS_MATERIEL, EMPLACEMENTS_MATERIEL, FLASK_PORT,
+    QR_CODES_DIR, RES_DIR
 )
 from database import get_session
 from models import Materiel, Attribution, User
@@ -36,6 +45,20 @@ from qr.generator import generer_qr_code, generer_code_vigile
 # =============================================================================
 
 main_bp = Blueprint("main", __name__)
+
+
+def _get_local_server_host() -> str:
+    """Retourne l'hôte local le plus probable pour encoder les QR."""
+    import socket
+
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.connect(("8.8.8.8", 80))
+        host = sock.getsockname()[0]
+        sock.close()
+        return host
+    except Exception:
+        return "127.0.0.1"
 
 
 @main_bp.route("/")
@@ -50,6 +73,17 @@ def index():
 def scan():
     """Page de scan QR avec caméra du téléphone."""
     return render_template("scan.html")
+
+
+@main_bp.route("/qr-codes/<path:filename>")
+@login_required
+def qr_code_file(filename):
+    """Sert un QR code généré dans le répertoire runtime utilisateur."""
+    normalized_name = os.path.basename(filename)
+    file_path = os.path.join(QR_CODES_DIR, normalized_name)
+    if not os.path.exists(file_path):
+        abort(404)
+    return send_from_directory(QR_CODES_DIR, normalized_name)
 
 
 @main_bp.route("/materiel/<code_vigile>")
@@ -455,16 +489,11 @@ def ajouter_materiel():
             session.flush()
 
             # Générer le QR code
-            import socket
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
-                ip = s.getsockname()[0]
-                s.close()
-            except Exception:
-                ip = "127.0.0.1"
-
-            qr_path = generer_qr_code(code_vigile, host=ip, port=FLASK_PORT)
+            qr_path = generer_qr_code(
+                code_vigile,
+                host=_get_local_server_host(),
+                port=FLASK_PORT,
+            )
             materiel.qr_code_path = qr_path
 
             session.commit()
@@ -609,9 +638,8 @@ def create_flask_app():
     """
     app = Flask(
         __name__,
-        template_folder=os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "templates"
-        )
+        template_folder=os.path.join(RES_DIR, "web", "templates"),
+        static_folder=os.path.join(RES_DIR, "web", "static")
     )
 
     # Configuration

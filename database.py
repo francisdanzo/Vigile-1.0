@@ -10,12 +10,16 @@ Ce module gère :
 - La création du compte admin par défaut au premier lancement
 """
 
-import os
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from config import SQLALCHEMY_DATABASE_URI, QR_CODES_DIR, ADMIN_DEFAULT
+from config import (
+    ADMIN_DEFAULT,
+    DATA_DIR,
+    DATABASE_PATH,
+    SQLALCHEMY_DATABASE_URI,
+    ensure_runtime_dirs,
+)
 from models import Base, User
 
 
@@ -51,13 +55,13 @@ def init_db() -> None:
     2. Crée le répertoire pour les QR codes s'il n'existe pas
     3. Crée le compte admin par défaut si aucun utilisateur n'existe
     """
+    ensure_runtime_dirs()
+    print(f"[VIGILE] Répertoire de données : {DATA_DIR}")
+
     # Créer toutes les tables
     Base.metadata.create_all(bind=engine)
     print("[VIGILE] Tables de la base de données créées avec succès.")
-
-    # Créer le répertoire des QR codes
-    os.makedirs(QR_CODES_DIR, exist_ok=True)
-    print(f"[VIGILE] Répertoire QR codes vérifié : {QR_CODES_DIR}")
+    print(f"[VIGILE] Base de données prête : {DATABASE_PATH}")
 
     # Créer l'admin par défaut si la BD est vide
     _creer_admin_par_defaut()
@@ -89,8 +93,7 @@ def _creer_admin_par_defaut() -> None:
         session.commit()
         print(
             f"[VIGILE] Compte admin créé : "
-            f"username='{ADMIN_DEFAULT['username']}', "
-            f"password='{ADMIN_DEFAULT['password']}'"
+            f"username='{ADMIN_DEFAULT['username']}'"
         )
         print("[VIGILE] ⚠ Changez ce mot de passe après la première connexion !")
 

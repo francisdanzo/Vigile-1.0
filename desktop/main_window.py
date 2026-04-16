@@ -699,15 +699,16 @@ class ServerFrame(tk.Frame):
             width=150, height=38, color=COLORS["bg_card"]
         )
         self.btn_tunnel_stop.pack(side="left")
-        self.btn_dl = VigileButton(
-            btn_t, text="⬇ Installer cloudflared", command=self._telecharger_cloudflared,
-            width=200, height=38, color=COLORS["accent_orange"]
-        )
-
-        # Vérifier si cloudflared est déjà présent
-        from tunnel import _get_cloudflared_path
-        if not os.path.exists(_get_cloudflared_path()):
-            self.btn_dl.pack(side="left", padx=(8, 0))
+        from tunnel import is_cloudflared_available
+        if not is_cloudflared_available():
+            tk.Label(
+                inner_t,
+                text="Le binaire cloudflared doit être inclus dans la release Windows.",
+                bg=COLORS["bg_card"],
+                fg=COLORS["accent_orange"],
+                font=("Segoe UI", 9),
+                anchor="w",
+            ).pack(fill="x", pady=(8, 0))
 
         # ── Zone QR ──────────────────────────────────────────────────────
         qr_frame = tk.Frame(self, bg=COLORS["bg_card"])
@@ -795,11 +796,12 @@ class ServerFrame(tk.Frame):
             )
             return
 
-        from tunnel import CloudflareTunnel, telecharger_cloudflared, _get_cloudflared_path
-        if not os.path.exists(_get_cloudflared_path()):
+        from tunnel import CloudflareTunnel, is_cloudflared_available
+        if not is_cloudflared_available():
             messagebox.showinfo(
                 "cloudflared manquant",
-                "cloudflared n'est pas installé.\nCliquez sur 'Installer cloudflared' d'abord."
+                "cloudflared n'est pas inclus dans cette installation.\n"
+                "Ajoutez le binaire au bundle de release avant d'activer le tunnel."
             )
             return
 
@@ -864,34 +866,6 @@ class ServerFrame(tk.Frame):
             self.clipboard_append(self.tunnel.url)
             self.tunnel_url_label.config(text=f"✓ Copié ! {self.tunnel.url}")
             self.after(2000, lambda: self.tunnel_url_label.config(text=self.tunnel.url))
-
-    def _telecharger_cloudflared(self):
-        """Lance le téléchargement de cloudflared avec feedback visuel."""
-        from tunnel import telecharger_cloudflared
-        self.btn_dl._active_color = COLORS["text_muted"]
-        self.btn_dl._draw()
-
-        def _dl():
-            def progression(msg):
-                self.after(0, lambda m=msg: self.tunnel_status_label.config(
-                    text=m, fg=COLORS["accent_orange"]
-                ))
-            ok = telecharger_cloudflared(callback_progression=progression)
-            if ok:
-                self.after(0, lambda: [
-                    self.tunnel_status_label.config(
-                        text="✓ cloudflared installé — Prêt à activer",
-                        fg=COLORS["accent_green"]
-                    ),
-                    self.btn_dl.pack_forget()
-                ])
-            else:
-                self.after(0, lambda: self.tunnel_status_label.config(
-                    text="Échec du téléchargement — Vérifiez internet",
-                    fg=COLORS["accent_red"]
-                ))
-
-        threading.Thread(target=_dl, daemon=True).start()
 
     def _generer_qr_serveur_url(self, url: str):
         """Génère un QR code pour une URL donnée (locale ou tunnel)."""

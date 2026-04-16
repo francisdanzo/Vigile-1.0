@@ -10,14 +10,13 @@ Ce script assemble et lance l'application complète :
 4. Lance l'interface Tkinter dans le thread principal
 
 Usage :
-    python app.py              → Mode complet (Tkinter + Flask)
-    python app.py --web-only   → Mode serveur uniquement (Flask seul)
+    python app.py               → Mode complet (Tkinter + Flask)
+    python app.py --web-only    → Mode serveur uniquement (Flask seul)
 """
 
 import os
 import sys
 import argparse
-import threading
 
 # S'assurer que le répertoire du projet est dans le path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,33 +40,29 @@ def main():
         "--port",
         type=int,
         default=FLASK_PORT,
-        help=f"Port du serveur Flask (défaut: {FLASK_PORT})"
+        help=f"Port du serveur web (défaut : {FLASK_PORT})"
     )
     args = parser.parse_args()
 
     # Afficher la bannière
-    print("=" * 60)
+    print("\n" + "=" * 60)
     print(f"  🛡  {APP_NAME} v{APP_VERSION}")
     print(f"  \"{APP_SLOGAN}\"")
-    print("=" * 60)
-    print()
+    print("=" * 60 + "\n")
 
     # ==========================================================================
     # Étape 1 : Initialiser la base de données
     # ==========================================================================
-    print("[VIGILE] Initialisation de la base de données...")
+    print("[VIGILE] Initialisation du système...")
     from database import init_db
     init_db()
-    print()
 
     # ==========================================================================
     # Étape 2 : Créer l'application Flask
     # ==========================================================================
-    print("[VIGILE] Création de l'application Flask...")
     from web.routes import create_flask_app
     flask_app = create_flask_app()
-    print("[VIGILE] Application Flask prête.")
-    print()
+    print("[VIGILE] Moteur prêt.")
 
     # ==========================================================================
     # Mode web uniquement
@@ -83,11 +78,8 @@ def main():
             ip = "127.0.0.1"
             
         print(f"[VIGILE] Mode serveur uniquement")
-        print(f"[VIGILE] Serveur accessible sur le réseau local à :")
-        print(f"[VIGILE] 👉  http://{ip}:{args.port}")
+        print(f"[VIGILE] Serveur accessible à : http://{ip}:{args.port}")
         print(f"[VIGILE] Ctrl+C pour arrêter\n")
-        
-        from ssl_helper import get_ssl_context
         
         flask_app.run(
             host="0.0.0.0",

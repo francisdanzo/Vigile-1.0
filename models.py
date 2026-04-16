@@ -9,6 +9,7 @@ Définit les trois tables principales :
 - Attribution : historique d'attribution du matériel aux personnes
 """
 
+import os
 from datetime import datetime, timezone
 
 import bcrypt
@@ -142,6 +143,13 @@ class Materiel(Base):
     def est_attribue(self) -> bool:
         """Retourne True si le matériel est actuellement attribué à quelqu'un."""
         return self.attribution_active is not None
+
+    @property
+    def qr_code_filename(self) -> str | None:
+        """Retourne le nom de fichier du QR, compatible Unix/Windows."""
+        if not self.qr_code_path:
+            return None
+        return os.path.basename(self.qr_code_path.replace("\\", "/"))
 
     def __repr__(self) -> str:
         return (

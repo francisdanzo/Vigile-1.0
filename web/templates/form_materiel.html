@@ -147,7 +147,7 @@
             <div class="card glass p-4 text-center">
                 <h5 class="mb-4">📱 QR Code Actuel</h5>
                 <div class="qr-preview-small mb-3">
-                    <img src="{{ url_for('static', filename='qr_codes/' ~ materiel.qr_code_path.split('/')[-1]) }}" 
+                    <img src="{{ url_for('main.qr_code_file', filename=materiel.qr_code_filename) }}" 
                          alt="QR Code" class="img-fluid rounded">
                 </div>
                 <div class="font-monospace small text-accent fw-bold">{{ materiel.code_vigile }}</div>
