@@ -327,6 +327,7 @@ class InventoryFrame(tk.Frame):
             detail_win.geometry("500x550")
             detail_win.configure(bg=COLORS["bg_dark"])
             detail_win.transient(self)
+            detail_win.wait_visibility()
             detail_win.grab_set()
 
             # Contenu
@@ -474,6 +475,7 @@ class InventoryFrame(tk.Frame):
         dialog.geometry("400x280")
         dialog.configure(bg=COLORS["bg_dark"])
         dialog.transient(self)
+        dialog.wait_visibility()
         dialog.grab_set()
 
         tk.Label(
@@ -597,6 +599,7 @@ class InventoryFrame(tk.Frame):
         dialog.geometry("350x200")
         dialog.configure(bg=COLORS["bg_dark"])
         dialog.transient(self)
+        dialog.wait_visibility()
         dialog.grab_set()
 
         tk.Label(

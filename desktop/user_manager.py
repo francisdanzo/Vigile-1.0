@@ -179,6 +179,7 @@ class UserManagerFrame(tk.Frame):
         dialog.geometry("420x420")
         dialog.configure(bg=COLORS["bg_dark"])
         dialog.transient(self)
+        dialog.wait_visibility()
         dialog.grab_set()
 
         tk.Label(
@@ -358,6 +359,7 @@ class UserManagerFrame(tk.Frame):
         dialog.geometry("380x220")
         dialog.configure(bg=COLORS["bg_dark"])
         dialog.transient(self)
+        dialog.wait_visibility()
         dialog.grab_set()
 
         tk.Label(

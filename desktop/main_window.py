@@ -815,7 +815,73 @@ class MainWindow:
         # Configurer le style ttk
         configurer_style(self.root)
 
-        # Afficher l'écran de connexion
+        # Afficher l'écran de lancement (splash screen) au lieu du login direct
+        self._afficher_splash()
+
+    def _fade_in_text(self, label, target_color, text=None, steps=20, duration=600):
+        """Anime l'apparition d'un texte par interpolation de couleur."""
+        if text:
+            label.config(text=text)
+
+        def hex_to_rgb(hex_c):
+            return tuple(int(hex_c.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+        
+        bg_rgb = hex_to_rgb(COLORS["bg_dark"])
+        target_rgb = hex_to_rgb(target_color)
+
+        def anim_step(current_step):
+            p = current_step / steps
+            r = int(bg_rgb[0] + (target_rgb[0] - bg_rgb[0]) * p)
+            g = int(bg_rgb[1] + (target_rgb[1] - bg_rgb[1]) * p)
+            b = int(bg_rgb[2] + (target_rgb[2] - bg_rgb[2]) * p)
+            
+            label.config(fg=f"#{r:02x}{g:02x}{b:02x}")
+            
+            if current_step < steps:
+                self.root.after(duration // steps, lambda: anim_step(current_step + 1))
+
+        anim_step(0)
+
+    def _afficher_splash(self):
+        """Affiche une animation de lancement de VIGILE."""
+        self.splash_frame = tk.Frame(self.root, bg=COLORS["bg_dark"])
+        self.splash_frame.pack(fill="both", expand=True)
+
+        container = tk.Frame(self.splash_frame, bg=COLORS["bg_dark"])
+        container.place(relx=0.5, rely=0.5, anchor="center")
+
+        # 1. Logo
+        self.logo_lbl = tk.Label(
+            container, text="🛡", bg=COLORS["bg_dark"], fg=COLORS["bg_dark"],
+            font=("Segoe UI", 90)
+        )
+        self.logo_lbl.pack()
+
+        # 2. Nom du projet
+        self.name_lbl = tk.Label(
+            container, text="", bg=COLORS["bg_dark"], fg=COLORS["bg_dark"],
+            font=("Segoe UI", 44, "bold")
+        )
+        self.name_lbl.pack(pady=(15, 0))
+
+        # 3. Auteur de manière discrète en bas
+        self.author_lbl = tk.Label(
+            self.splash_frame, text="", bg=COLORS["bg_dark"], 
+            fg=COLORS["bg_dark"], font=("Segoe UI", 11)
+        )
+        self.author_lbl.pack(side="bottom", pady=40)
+
+        # Séquençage des animations
+        self.root.after(400, lambda: self._fade_in_text(self.logo_lbl, COLORS["accent_blue"], duration=800))
+        self.root.after(1400, lambda: self._fade_in_text(self.name_lbl, COLORS["text_primary"], text="V I G I L E", duration=800))
+        self.root.after(2600, lambda: self._fade_in_text(self.author_lbl, COLORS["text_muted"], text="© 2026 — Créé par Francis NDAYUBAHA", duration=1000))
+
+        # Transition vers l'écran de login
+        self.root.after(4800, self._fin_splash)
+
+    def _fin_splash(self):
+        """Détruit le splash screen et lance l'interface de connexion."""
+        self.splash_frame.destroy()
         self._afficher_login()
 
     def _afficher_login(self):
