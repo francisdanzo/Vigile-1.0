@@ -19,6 +19,7 @@ from flask import (
     redirect, url_for, flash, jsonify
 )
 from flask_login import login_required, current_user
+from sqlalchemy.orm import joinedload
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -251,6 +252,96 @@ def recuperer(code_vigile):
         session.rollback()
         flash(f"Erreur : {e}", "error")
         return redirect(url_for("main.fiche_materiel", code_vigile=code_vigile))
+    finally:
+        session.close()
+
+
+# =============================================================================
+# Dashboard & Statistiques
+# =============================================================================
+
+@main_bp.route("/dashboard")
+@login_required
+def dashboard():
+    """Tableau de bord avec statistiques et activités récentes."""
+    session = get_session()
+    try:
+        # Statistiques
+        total = session.query(Materiel).count()
+        
+        attribue = (
+            session.query(Materiel)
+            .join(Attribution, Materiel.id == Attribution.materiel_id)
+            .filter(Attribution.is_active == True)
+            .count()
+        )
+        
+        en_panne = session.query(Materiel).filter(Materiel.etat == "en_panne").count()
+        
+        disponible = max(0, total - attribue - en_panne)
+        
+        # Activités récentes (10 dernières) — eager load materiel
+        activites = (
+            session.query(Attribution)
+            .options(joinedload(Attribution.materiel))
+            .order_by(Attribution.date_attribution.desc())
+            .limit(10)
+            .all()
+        )
+        
+        return render_template(
+            "dashboard.html",
+            stats={
+                "total": total,
+                "attribue": attribue,
+                "disponible": disponible,
+                "en_panne": en_panne
+            },
+            activites=activites
+        )
+    finally:
+        session.close()
+
+
+@main_bp.route("/historique")
+@login_required
+def historique():
+    """Historique global de toutes les attributions."""
+    session = get_session()
+    try:
+        page = request.args.get("page", 1, type=int)
+        per_page = 20
+        
+        # Recherche/Filtre par personne ou code
+        q = request.args.get("q", "").strip()
+        
+        query = session.query(Attribution).join(Materiel).options(
+            joinedload(Attribution.materiel),
+            joinedload(Attribution.attribueur)
+        )
+        if q:
+            query = query.filter(
+                (Attribution.attribue_a.ilike(f"%{q}%")) |
+                (Materiel.code_vigile.ilike(f"%{q}%"))
+            )
+            
+        total_records = query.count()
+        attributions = (
+            query.order_by(Attribution.date_attribution.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
+        
+        total_pages = (total_records + per_page - 1) // per_page
+        
+        return render_template(
+            "history.html",
+            attributions=attributions,
+            page=page,
+            total_pages=total_pages,
+            q=q
+        )
     finally:
         session.close()
 
@@ -534,6 +625,7 @@ def create_flask_app():
             "app_name": APP_NAME,
             "app_slogan": APP_SLOGAN,
             "app_version": APP_VERSION,
+            "now": datetime.now(),
         }
 
     # Enregistrer Flask-Login

@@ -780,7 +780,7 @@ class ServerFrame(tk.Frame):
         self.status_label.config(
             text="● Serveur arrêté", fg=COLORS["accent_red"]
         )
-        self.url_label.config(fg=COLORS["text_secondary"])
+        self.url_label_local.config(fg=COLORS["text_secondary"])
         self.qr_label.config(
             text="Démarrez le serveur pour générer le QR code",
             image="", compound="none"

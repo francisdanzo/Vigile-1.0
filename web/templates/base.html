@@ -598,8 +598,10 @@
                 <span class="brand-name">{{ app_name }}</span>
             </a>
             <div class="navbar-actions">
+                <a href="{{ url_for('main.dashboard') }}" class="nav-link {% if request.path == url_for('main.dashboard') %}active{% endif %}">📊 Dashboard</a>
                 <a href="{{ url_for('main.scan') }}" class="nav-link {% if request.path == url_for('main.scan') %}active{% endif %}">📷 Scanner</a>
                 <a href="{{ url_for('main.inventaire') }}" class="nav-link {% if 'inventaire' in request.path %}active{% endif %}">📋 Inventaire</a>
+                <a href="{{ url_for('main.historique') }}" class="nav-link {% if request.path == url_for('main.historique') %}active{% endif %}">🕒 Historique</a>
                 <span class="navbar-user d-none d-md-inline">👤 {{ current_user.username }}</span>
                 <a href="{{ url_for('auth.logout') }}" class="nav-link text-danger-hover">Déconnexion</a>
             </div>

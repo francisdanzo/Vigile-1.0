@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Historique Global — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="history-container animate-fade-in">
+    <!-- Header -->
+    <div class="row align-items-center mb-4">
+        <div class="col">
+            <h1 class="h2 mb-0">🕒 Historique Global</h1>
+            <p class="text-secondary small mb-0">Trçabilité complète des attributions et retours</p>
+        </div>
+        <div class="col-auto">
+            <form class="d-flex" method="GET" action="{{ url_for('main.historique') }}">
+                <div class="input-group">
+                    <input type="text" name="q" class="form-control" placeholder="Nom ou Code VIGILE..." value="{{ q }}">
+                    <button class="btn btn-accent" type="submit">Rechercher</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- History Table -->
+    <div class="card glass overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-dark-subtle">
+                    <tr>
+                        <th class="ps-4">Date</th>
+                        <th>Action</th>
+                        <th>Équipement</th>
+                        <th>Attribué à</th>
+                        <th>Par</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for attr in attributions %}
+                    <tr>
+                        <td class="ps-4">
+                            <div class="small fw-bold">{{ attr.date_attribution.strftime('%d/%m/%Y') }}</div>
+                            <div class="text-muted small">{{ attr.date_attribution.strftime('%H:%M') }}</div>
+                        </td>
+                        <td>
+                            {% if attr.is_active %}
+                                <span class="badge bg-warning-dim text-accent-orange px-3">En prêt</span>
+                            {% else %}
+                                <div class="badge bg-success-dim text-accent-green px-3">Retourné</div>
+                                <div class="small text-muted mt-1">le {{ attr.date_retour.strftime('%d/%m/%Y') if attr.date_retour else '-' }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('main.fiche_materiel', code_vigile=attr.materiel.code_vigile) }}" 
+                               class="text-accent fw-bold font-monospace text-decoration-none">
+                               {{ attr.materiel.code_vigile }}
+                            </a>
+                            <div class="small text-muted">{{ attr.materiel.type|capitalize }}</div>
+                        </td>
+                        <td>
+                            <div class="fw-medium">{{ attr.attribue_a }}</div>
+                        </td>
+                        <td>
+                            <span class="small text-secondary">👤 {{ attr.attribueur.username if attr.attribueur else 'Système' }}</span>
+                        </td>
+                        <td>
+                            <span class="small text-muted text-truncate d-inline-block" style="max-width: 150px;" title="{{ attr.notes or '' }}">
+                                {{ attr.notes or '—' }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">Aucun historique trouvé</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            <li class="page-item {{ 'disabled' if page == 1 }}">
+                <a class="page-link glass" href="{{ url_for('main.historique', page=page-1, q=q) }}">Précédent</a>
+            </li>
+            {% for p in range(1, total_pages + 1) %}
+            <li class="page-item {{ 'active' if p == page }}">
+                <a class="page-link glass {{ 'bg-accent border-accent text-white' if p == page }}" 
+                   href="{{ url_for('main.historique', page=p, q=q) }}">{{ p }}</a>
+            </li>
+            {% endfor %}
+            <li class="page-item {{ 'disabled' if page == total_pages }}">
+                <a class="page-link glass" href="{{ url_for('main.historique', page=page+1, q=q) }}">Suivant</a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+
+<style>
+.history-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+.bg-warning-dim { background: rgba(255, 159, 67, 0.1); }
+.bg-success-dim { background: rgba(0, 200, 150, 0.1); }
+.page-link {
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+.page-link:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+}
+</style>
+{% endblock %}
