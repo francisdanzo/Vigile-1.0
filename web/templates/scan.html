@@ -60,9 +60,6 @@
     let lastScannedCode = '';
     let scanCooldown = false;
 
-    /**
-     * Démarre la caméra arrière du téléphone
-     */
     async function demarrerCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -84,7 +81,7 @@
             statusEl.innerHTML = `
                 <span style="color: var(--accent-red);">
                     ⚠️ Impossible d'accéder à la caméra.<br>
-                    <small>Vérifiez les permissions ou utilisez la saisie manuelle.</small>
+                    <small>Vérifiez les permissions de votre navigateur ou utilisez la saisie manuelle.</small>
                 </span>
             `;
         }

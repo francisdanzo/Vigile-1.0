@@ -73,10 +73,22 @@ def main():
     # Mode web uniquement
     # ==========================================================================
     if args.web_only:
+        import socket
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            ip = "127.0.0.1"
+            
         print(f"[VIGILE] Mode serveur uniquement")
-        print(f"[VIGILE] Démarrage sur http://0.0.0.0:{args.port}")
-        print(f"[VIGILE] Ctrl+C pour arrêter")
-        print()
+        print(f"[VIGILE] Serveur accessible sur le réseau local à :")
+        print(f"[VIGILE] 👉  http://{ip}:{args.port}")
+        print(f"[VIGILE] Ctrl+C pour arrêter\n")
+        
+        from ssl_helper import get_ssl_context
+        
         flask_app.run(
             host="0.0.0.0",
             port=args.port,
@@ -118,7 +130,7 @@ def main():
     def on_closing():
         """Callback de fermeture de l'application."""
         print("\n[VIGILE] Fermeture de l'application...")
-        root.destroy()
+        app._afficher_splash_fermeture()
 
     root.protocol("WM_DELETE_WINDOW", on_closing)
 

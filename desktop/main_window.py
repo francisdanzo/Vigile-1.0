@@ -306,9 +306,10 @@ class LoginFrame(tk.Frame):
 
         # Champ username
         self.username_field = VigileEntry(
-            card, label="Nom d'utilisateur", placeholder="admin"
+            card, label="Nom d'utilisateur", placeholder=""
         )
         self.username_field.pack(fill="x", padx=20, pady=(0, 12))
+        self.username_field.set("admin")
 
         # Champ password
         self.password_field = VigileEntry(
@@ -883,6 +884,41 @@ class MainWindow:
         """Détruit le splash screen et lance l'interface de connexion."""
         self.splash_frame.destroy()
         self._afficher_login()
+
+    def _afficher_splash_fermeture(self):
+        """Affiche une animation de lancement de VIGILE."""
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        self.root.configure(bg=COLORS["bg_dark"])
+        container = tk.Frame(self.root, bg=COLORS["bg_dark"])
+        container.place(relx=0.5, rely=0.5, anchor="center")
+
+        logo_lbl = tk.Label(
+            container, text="🛡", bg=COLORS["bg_dark"], fg=COLORS["accent_blue"],
+            font=("Segoe UI", 90)
+        )
+        logo_lbl.pack()
+
+        name_lbl = tk.Label(
+            container, text="V I G I L E", bg=COLORS["bg_dark"], fg=COLORS["text_primary"],
+            font=("Segoe UI", 44, "bold")
+        )
+        name_lbl.pack(pady=(15, 0))
+
+        author_lbl = tk.Label(
+            self.root, text="© 2026 — Créé par Francis NDAYUBAHA", bg=COLORS["bg_dark"], 
+            fg=COLORS["text_muted"], font=("Segoe UI", 11)
+        )
+        author_lbl.pack(side="bottom", pady=40)
+
+        # Reverse fade out animation
+        self.root.after(400, lambda: self._fade_in_text(author_lbl, COLORS["bg_dark"], duration=800))
+        self.root.after(1400, lambda: self._fade_in_text(name_lbl, COLORS["bg_dark"], duration=800))
+        self.root.after(2600, lambda: self._fade_in_text(logo_lbl, COLORS["bg_dark"], duration=1000))
+
+        # Close app
+        self.root.after(4000, self.root.destroy)
 
     def _afficher_login(self):
         """Affiche l'écran de connexion."""
