@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 import threading
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -34,6 +35,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QGraphicsDropShadowEffect,
     QGridLayout,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QLayout,
@@ -326,8 +328,11 @@ class VigileTable(QTableWidget):
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.setShowGrid(False)
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.horizontalHeader().setStretchLastSection(True)
         self.setSortingEnabled(True)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
     def empty(self, message: str) -> None:
         self.setRowCount(1)
@@ -771,7 +776,7 @@ class ServerFrame(QWidget):
         tunnel_row.addWidget(QLabel("Tunnel Internet"))
         tunnel_row.addStretch(1)
         self.tunnel_card.layout().addLayout(tunnel_row)
-        self.tunnel_label = QLabel("https://—")
+        self.tunnel_label = QLabel("Tunnel inactif")
         self.tunnel_label.setStyleSheet(f"font-size: 18px; font-weight: 600; color: {COLORS['primary']};")
         self.tunnel_status = QLabel("Tunnel arrêté")
         self.tunnel_status.setObjectName("MutedLabel")
@@ -782,31 +787,43 @@ class ServerFrame(QWidget):
         actions = QHBoxLayout()
         self.start_server_button = VigileButton("Démarrer serveur", "primary")
         self.start_server_button.clicked.connect(self.start_server)
+        self.stop_server_button = VigileButton("Arrêter serveur", "danger")
+        self.stop_server_button.clicked.connect(self.stop_server)
+        self.stop_server_button.setEnabled(False)
         self.start_tunnel_button = VigileButton("Démarrer tunnel", "secondary")
         self.start_tunnel_button.clicked.connect(self.start_tunnel)
+        self.start_tunnel_button.setEnabled(False)
+        self.stop_tunnel_button = VigileButton("Arrêter tunnel", "danger")
+        self.stop_tunnel_button.clicked.connect(self.stop_tunnel)
+        self.stop_tunnel_button.setEnabled(False)
         copy_local = VigileButton("Copier URL locale", "secondary")
         copy_local.clicked.connect(lambda: QApplication.clipboard().setText(self.local_url))
-        copy_public = VigileButton("Copier URL publique", "secondary")
-        copy_public.clicked.connect(lambda: QApplication.clipboard().setText(self.public_url or self.local_url))
-        for widget in (self.start_server_button, self.start_tunnel_button, copy_local, copy_public):
+        self.copy_public_button = VigileButton("Copier URL publique", "secondary")
+        self.copy_public_button.clicked.connect(lambda: QApplication.clipboard().setText(self.public_url))
+        self.copy_public_button.setEnabled(False)
+        for widget in (
+            self.start_server_button,
+            self.stop_server_button,
+            self.start_tunnel_button,
+            self.stop_tunnel_button,
+            copy_local,
+            self.copy_public_button,
+        ):
             actions.addWidget(widget)
         layout.addLayout(actions)
         lower = QHBoxLayout()
         lower.setSpacing(18)
         qr_card = StyledCard()
-        qr_card.layout().addWidget(QLabel("QR du serveur"))
+        qr_card.layout().addWidget(QLabel("QR Cloudflare"))
         self.qr_label = QLabel()
         self.qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         qr_card.layout().addWidget(self.qr_label)
-        self._refresh_qr(self.local_url)
+        self.qr_hint = QLabel("QR disponible après activation du tunnel")
+        self.qr_hint.setObjectName("MutedLabel")
+        self.qr_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        qr_card.layout().addWidget(self.qr_hint)
+        self._refresh_qr(None)
         lower.addWidget(qr_card, 1)
-        log_card = StyledCard()
-        log_card.layout().addWidget(QLabel("Journal cloudflared"))
-        self.log_output = QPlainTextEdit()
-        self.log_output.setReadOnly(True)
-        self.log_output.setStyleSheet("QPlainTextEdit { font-family: 'DejaVu Sans Mono', monospace; font-size: 12px; }")
-        log_card.layout().addWidget(self.log_output)
-        lower.addWidget(log_card, 2)
         layout.addLayout(lower)
 
     def _local_url(self) -> str:
@@ -819,18 +836,24 @@ class ServerFrame(QWidget):
             ip = "127.0.0.1"
         return f"http://{ip}:{FLASK_PORT}"
 
-    def _refresh_qr(self, url: str) -> None:
-        # Le QR du serveur permet une bascule immédiate du desktop vers le mobile terrain.
+    def _refresh_qr(self, url: str | None) -> None:
+        # Le QR du serveur ne s'affiche que pour l'URL Cloudflare publique.
+        if not url:
+            self.qr_label.clear()
+            self.qr_hint.setText("QR disponible après activation du tunnel")
+            self.qr_hint.show()
+            return
         try:
-            host = url.split("//", 1)[-1].split(":", 1)[0]
-            path = generer_qr_code("VIG-SERVER", host=host, port=FLASK_PORT)
+            path = generer_qr_code("VIG-SERVER", url=url)
             pixmap = QPixmap(path).scaled(220, 220, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.qr_label.setPixmap(pixmap)
+            self.qr_hint.hide()
         except Exception:
             self.qr_label.setText("QR indisponible")
+            self.qr_hint.hide()
 
     def append_log(self, message: str) -> None:
-        self.log_output.appendPlainText(message)
+        pass
 
     def start_server(self) -> None:
         if self.flask_thread and self.flask_thread.is_alive():
@@ -844,26 +867,86 @@ class ServerFrame(QWidget):
         self.flask_thread.start()
         self.local_indicator.start()
         self.local_status.setText("Serveur actif")
+        self.start_server_button.setEnabled(False)
+        self.stop_server_button.setEnabled(True)
+        self.start_tunnel_button.setEnabled(True)
         self.append_log(f"Serveur démarré sur {self.local_url}")
+
+    def stop_server(self) -> None:
+        if not self.flask_thread or not self.flask_thread.is_alive():
+            self.local_status.setText("Serveur arrêté")
+            self.start_server_button.setEnabled(True)
+            self.stop_server_button.setEnabled(False)
+            self.start_tunnel_button.setEnabled(False)
+            return
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{FLASK_PORT}/__shutdown__",
+                method="POST",
+            )
+            urllib.request.urlopen(request, timeout=3)
+        except Exception:
+            pass
+        self.local_indicator.stop()
+        self.local_status.setText("Serveur arrêté")
+        self.start_server_button.setEnabled(True)
+        self.stop_server_button.setEnabled(False)
+        self.start_tunnel_button.setEnabled(False)
+        self.stop_tunnel_button.setEnabled(False)
+        self.copy_public_button.setEnabled(False)
+        self.public_url = ""
+        self.tunnel_label.setText("Tunnel inactif")
+        self._refresh_qr(None)
 
     def start_tunnel(self) -> None:
         if self.tunnel_thread and self.tunnel_thread.isRunning():
             self.append_log("Tunnel déjà actif.")
             return
+        if not self.flask_thread or not self.flask_thread.is_alive():
+            self.tunnel_status.setText("Démarrez d'abord le serveur local")
+            return
         self.tunnel_thread = TunnelRunner(FLASK_PORT)
         self.tunnel_thread.log.connect(self.append_log)
         self.tunnel_thread.url_ready.connect(self._on_tunnel_url)
         self.tunnel_thread.failed.connect(lambda message: self.append_log(f"Erreur: {message}"))
-        self.tunnel_thread.stopped.connect(lambda: self.tunnel_status.setText("Tunnel arrêté"))
+        self.tunnel_thread.stopped.connect(self._on_tunnel_stopped)
         self.tunnel_thread.start()
         self.tunnel_indicator.start()
         self.tunnel_status.setText("Initialisation du tunnel…")
+        self.start_tunnel_button.setEnabled(False)
+        self.stop_tunnel_button.setEnabled(True)
+
+    def stop_tunnel(self) -> None:
+        if not self.tunnel_thread:
+            return
+        self.tunnel_thread.stop()
+        self.tunnel_indicator.stop()
+        self.tunnel_status.setText("Tunnel arrêté")
+        self.start_tunnel_button.setEnabled(True)
+        self.stop_tunnel_button.setEnabled(False)
+        self.copy_public_button.setEnabled(False)
+        self.public_url = ""
+        self.tunnel_label.setText("Tunnel inactif")
+        self._refresh_qr(None)
 
     def _on_tunnel_url(self, url: str) -> None:
         self.public_url = url
         self.tunnel_label.setText(url)
         self.tunnel_status.setText("Tunnel opérationnel")
         self._refresh_qr(url)
+        self.stop_tunnel_button.setEnabled(True)
+        self.start_tunnel_button.setEnabled(False)
+        self.copy_public_button.setEnabled(True)
+
+    def _on_tunnel_stopped(self) -> None:
+        self.tunnel_indicator.stop()
+        self.tunnel_status.setText("Tunnel arrêté")
+        self.start_tunnel_button.setEnabled(True)
+        self.stop_tunnel_button.setEnabled(False)
+        self.copy_public_button.setEnabled(False)
+        self.public_url = ""
+        self.tunnel_label.setText("Tunnel inactif")
+        self._refresh_qr(None)
 
 
 class Sidebar(QFrame):
@@ -1007,6 +1090,8 @@ class VigileWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidget(self.login)
         self.body.addWidget(scroll)
 
@@ -1043,6 +1128,8 @@ class VigileWindow(QMainWindow):
             placeholder = QScrollArea()
             placeholder.setWidgetResizable(True)
             placeholder.setFrameShape(QFrame.Shape.NoFrame)
+            placeholder.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            placeholder.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             placeholder.setWidget(QWidget())
             self.stack.addWidget(placeholder)
         self._ensure_page("dashboard")
@@ -1057,6 +1144,8 @@ class VigileWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         surface = QWidget()
         surface_layout = QVBoxLayout(surface)
         surface_layout.setContentsMargins(18, 18, 18, 18)

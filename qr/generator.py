@@ -20,22 +20,24 @@ from config import QR_CODES_DIR, QR_BOX_SIZE, QR_BORDER, FLASK_PORT
 def generer_qr_code(
     code_vigile: str,
     host: str = "192.168.1.1",
-    port: int = None
+    port: int = None,
+    url: str | None = None
 ) -> str:
     """
     Génère un QR code PNG pour un matériel identifié par son code VIGILE.
-    
-    Le QR code encode l'URL : http://{host}:{port}/materiel/{code_vigile}
-    Le fichier est sauvegardé dans le répertoire des QR codes.
-    
+
+    Par défaut, le QR code encode l'URL : http://{host}:{port}/materiel/{code_vigile}.
+    Si une URL complète est fournie, elle est utilisée telle quelle.
+
     Args:
         code_vigile: Code unique du matériel (ex: VIG-2026-0001)
         host: Adresse IP ou hostname du serveur Flask
         port: Port du serveur Flask (défaut: config.FLASK_PORT)
-    
+        url: URL complète à encoder dans le QR code (optionnel)
+
     Returns:
         Chemin absolu du fichier QR code PNG généré
-    
+
     Raises:
         OSError: Si le répertoire de destination n'est pas accessible
         ValueError: Si le code_vigile est vide
@@ -43,11 +45,13 @@ def generer_qr_code(
     if not code_vigile:
         raise ValueError("Le code VIGILE ne peut pas être vide.")
 
-    if port is None:
-        port = FLASK_PORT
+    if url is None:
+        if port is None:
+            port = FLASK_PORT
+        url = f"http://{host}:{port}/materiel/{code_vigile}"
 
-    # Construire l'URL que le QR code va encoder
-    url = f"http://{host}:{port}/materiel/{code_vigile}"
+    # S'assurer que le répertoire de destination existe
+    os.makedirs(QR_CODES_DIR, exist_ok=True)
 
     # S'assurer que le répertoire de destination existe
     os.makedirs(QR_CODES_DIR, exist_ok=True)

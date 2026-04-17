@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 from flask import (
     Flask, Blueprint, render_template, request,
-    redirect, url_for, flash, jsonify
+    redirect, url_for, flash, jsonify, abort
 )
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
@@ -43,6 +43,18 @@ main_bp = Blueprint("main", __name__)
 def index():
     """Page d'accueil — redirige vers le scanner."""
     return redirect(url_for("main.scan"))
+
+
+@main_bp.route("/__shutdown__", methods=["POST"])
+def shutdown_server():
+    """Arrête proprement le serveur local depuis l'interface de bureau."""
+    if request.remote_addr not in ("127.0.0.1", "::1"):
+        abort(403)
+    shutdown = request.environ.get("werkzeug.server.shutdown")
+    if shutdown is None:
+        abort(500, "Impossible d'arrêter le serveur")
+    shutdown()
+    return "OK"
 
 
 @main_bp.route("/scan")
