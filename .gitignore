@@ -9,3 +9,5 @@ desktop/__pycache__
 assets/qr_codes
 venv
 vigile.db
+web/__pycache__
+web/__pycache__/__init__.cpython-313.pyc

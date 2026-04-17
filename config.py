@@ -9,19 +9,28 @@ de configuration utilisés par l'application.
 
 import os
 import secrets
+import sys
 
 # =============================================================================
-# Chemins de base
+# Chemins de base et Persistance
 # =============================================================================
 
-# Répertoire racine du projet (là où se trouve ce fichier)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Répertoire racine de l'exécutable ou du script
+if getattr(sys, 'frozen', False):
+    # Si l'application est "gelée" par PyInstaller
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Répertoire de données utilisateur (Peut être différent sur Windows/Linux)
+# On utilise un dossier caché dans le répertoire personnel de l'utilisateur
+DATA_DIR = os.path.join(os.path.expanduser("~"), ".vigile")
 
 # Répertoire de stockage des QR codes générés
-QR_CODES_DIR = os.path.join(BASE_DIR, "assets", "qr_codes")
+QR_CODES_DIR = os.path.join(DATA_DIR, "assets", "qr_codes")
 
 # Chemin de la base de données SQLite
-DATABASE_PATH = os.path.join(BASE_DIR, "vigile.db")
+DATABASE_PATH = os.path.join(DATA_DIR, "vigile.db")
 
 # URI SQLAlchemy pour la connexion à la base
 SQLALCHEMY_DATABASE_URI = f"sqlite:///{DATABASE_PATH}"

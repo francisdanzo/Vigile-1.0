@@ -15,7 +15,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from config import SQLALCHEMY_DATABASE_URI, QR_CODES_DIR, ADMIN_DEFAULT
+from config import SQLALCHEMY_DATABASE_URI, QR_CODES_DIR, ADMIN_DEFAULT, DATA_DIR
 from models import Base, User
 
 
@@ -47,10 +47,14 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 def init_db() -> None:
     """
     Initialise la base de données :
-    1. Crée toutes les tables définies dans models.py
-    2. Crée le répertoire pour les QR codes s'il n'existe pas
-    3. Crée le compte admin par défaut si aucun utilisateur n'existe
+    1. Crée le dossier de données utilisateur
+    2. Crée toutes les tables définies dans models.py
+    3. Crée le répertoire pour les QR codes s'il n'existe pas
+    4. Crée le compte admin par défaut si aucun utilisateur n'existe
     """
+    # Créer le dossier data racine
+    os.makedirs(DATA_DIR, exist_ok=True)
+    
     # Créer toutes les tables
     Base.metadata.create_all(bind=engine)
     print("[VIGILE] Tables de la base de données créées avec succès.")
