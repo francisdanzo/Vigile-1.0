@@ -1,184 +1,73 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'Ajouter' if action == 'ajouter' else 'Modifier' }} un matériel — {{ app_name }}{% endblock %}
+{% block title %}{{ 'Ajouter' if action == 'ajouter' else 'Modifier' }} un matériel - {{ app_name }}{% endblock %}
 
 {% block content %}
-<div class="form-container animate-fade-in">
-    <!-- Breadcrumbs -->
-    <nav aria-label="breadcrumb" class="mb-4">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('main.inventaire') }}" class="text-accent text-decoration-none">📋 Inventaire</a></li>
-            <li class="breadcrumb-item active text-secondary" aria-current="page">
-                {{ 'Nouveau matériel' if action == 'ajouter' else 'Modifier ' ~ materiel.code_vigile }}
-            </li>
-        </ol>
-    </nav>
+<section>
+    <h1 class="page-title">{{ 'Ajouter un matériel' if action == 'ajouter' else 'Modifier le matériel' }}</h1>
+    <p class="page-subtitle">Formulaire mobile-first compatible avec les routes Flask existantes.</p>
+</section>
 
-    <div class="row">
-        <div class="col-lg-8">
-            <div class="card glass p-4 p-md-5">
-                <div class="d-flex align-items-center mb-5">
-                    <div class="icon-circle me-3">
-                        {% if action == 'ajouter' %}➕{% else %}✏️{% endif %}
-                    </div>
-                    <h1 class="h3 mb-0">{{ 'Ajouter un matériel' if action == 'ajouter' else 'Modifier le matériel' }}</h1>
-                </div>
-
-                <form method="POST" class="needs-validation">
-                    <!-- Section Identification -->
-                    <div class="form-section mb-5">
-                        <h5 class="text-accent mb-4 fw-bold small text-uppercase tracking-wider">🏷 Identification</h5>
-                        
-                        <div class="row g-4">
-                            {% if action == 'modifier' %}
-                            <div class="col-12">
-                                <label class="form-label text-secondary small">Code VIGILE</label>
-                                <input type="text" class="form-control font-monospace border-0 bg-dark-subtle" 
-                                       value="{{ materiel.code_vigile }}" readonly disabled>
-                            </div>
-                            {% endif %}
-
-                            <div class="col-md-6">
-                                <label for="type" class="form-label mb-1">Type de matériel <span class="text-danger">*</span></label>
-                                <select name="type" id="type" class="form-select" required>
-                                    {% for t in types %}
-                                        <option value="{{ t }}" {% if action == 'modifier' and materiel.type == t %}selected{% endif %}>
-                                            {{ t|capitalize }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label for="marque" class="form-label mb-1">Marque</label>
-                                <input type="text" name="marque" id="marque" class="form-control" 
-                                       placeholder="Ex: Dell, HP, Lenovo..." 
-                                       value="{{ materiel.marque if materiel else '' }}">
-                            </div>
-
-                            <div class="col-md-6">
-                                <label for="modele" class="form-label mb-1">Modèle</label>
-                                <input type="text" name="modele" id="modele" class="form-control" 
-                                       placeholder="Ex: Latitude 5540" 
-                                       value="{{ materiel.modele if materiel else '' }}">
-                            </div>
-
-                            <div class="col-md-6">
-                                <label for="numero_serie" class="form-label mb-1">Numéro de série</label>
-                                <input type="text" name="numero_serie" id="numero_serie" class="form-control" 
-                                       placeholder="Ex: SN-ABC123456" 
-                                       value="{{ materiel.numero_serie if materiel else '' }}">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Section État et Localisation -->
-                    <div class="form-section mb-5">
-                        <h5 class="text-accent mb-4 fw-bold small text-uppercase tracking-wider">📍 État et localisation</h5>
-                        
-                        <div class="row g-4">
-                            <div class="col-md-6">
-                                <label for="etat" class="form-label mb-1">État actuel <span class="text-danger">*</span></label>
-                                <select name="etat" id="etat" class="form-select" required>
-                                    {% for e in etats %}
-                                        <option value="{{ e }}" {% if (action == 'modifier' and materiel.etat == e) or (action == 'ajouter' and e == 'neuf') %}selected{% endif %}>
-                                            {{ e|capitalize }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label for="emplacement" class="form-label mb-1">Emplacement <span class="text-danger">*</span></label>
-                                <select name="emplacement" id="emplacement" class="form-select" required>
-                                    {% for l in emplacements %}
-                                        <option value="{{ l }}" {% if (action == 'modifier' and materiel.emplacement == l) or (action == 'ajouter' and l == 'réserve') %}selected{% endif %}>
-                                            {{ l|capitalize }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-
-                            <div class="col-12">
-                                <label for="date_acquisition" class="form-label mb-1">Date d'acquisition</label>
-                                <input type="date" name="date_acquisition" id="date_acquisition" class="form-control"
-                                       value="{{ materiel.date_acquisition.strftime('%Y-%m-%d') if materiel and materiel.date_acquisition else '' }}">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Section Notes -->
-                    <div class="form-section mb-5">
-                        <h5 class="text-accent mb-4 fw-bold small text-uppercase tracking-wider">📝 Notes</h5>
-                        <textarea name="notes" id="notes" class="form-control" rows="4" 
-                                  placeholder="Commentaires additionnels (optionnel)">{{ materiel.notes if materiel else '' }}</textarea>
-                    </div>
-
-                    <!-- Actions -->
-                    <div class="d-flex gap-3 mt-5">
-                        <button type="submit" class="btn btn-accent px-5 py-2 fw-bold">
-                            {{ '💾 Sauvegarder' if action == 'ajouter' else '✅ Mettre à jour' }}
-                        </button>
-                        <a href="{{ url_for('main.inventaire') }}" class="btn btn-outline-secondary px-4 py-2">
-                            Annuler
-                        </a>
-                    </div>
-                </form>
+<section class="card">
+    <form method="POST" class="form-grid">
+        {% if action == 'modifier' %}
+        <div class="field">
+            <input id="code_vigile" type="text" value="{{ materiel.code_vigile }}" placeholder=" " readonly>
+            <label for="code_vigile">Code VIGILE</label>
+        </div>
+        {% endif %}
+        <div class="field">
+            <select id="type" name="type" required>
+                {% for item in types %}
+                <option value="{{ item }}" {% if (materiel and materiel.type == item) or (not materiel and loop.first) %}selected{% endif %}>{{ item | capitalize }}</option>
+                {% endfor %}
+            </select>
+            <label for="type">Type</label>
+        </div>
+        <div class="panel-grid two-up">
+            <div class="field">
+                <input id="marque" name="marque" type="text" placeholder=" " value="{{ materiel.marque if materiel else '' }}">
+                <label for="marque">Marque</label>
+            </div>
+            <div class="field">
+                <input id="modele" name="modele" type="text" placeholder=" " value="{{ materiel.modele if materiel else '' }}">
+                <label for="modele">Modèle</label>
             </div>
         </div>
-
-        <!-- Info Sidebar -->
-        <div class="col-lg-4 mt-4 mt-lg-0">
-            <div class="card glass p-4 mb-4">
-                <h5 class="mb-3">ℹ Aide</h5>
-                <p class="text-secondary small">
-                    Les champs marqués d'une <span class="text-danger">*</span> sont obligatoires.
-                </p>
-                <p class="text-secondary small">
-                    {% if action == 'ajouter' %}
-                        À la sauvegarde, un code VIGILE unique sera généré automatiquement (format VIG-{{ now.year }}-XXXX). Un QR code sera également créé.
-                    {% else %}
-                        La modification de l'état ou de l'emplacement sera enregistrée dans l'historique de l'équipement.
-                    {% endif %}
-                </p>
-            </div>
-
-            {% if action == 'modifier' and materiel.qr_code_path %}
-            <div class="card glass p-4 text-center">
-                <h5 class="mb-4">📱 QR Code Actuel</h5>
-                <div class="qr-preview-small mb-3">
-                    <img src="{{ url_for('static', filename='qr_codes/' ~ materiel.qr_code_path.split('/')[-1]) }}" 
-                         alt="QR Code" class="img-fluid rounded">
-                </div>
-                <div class="font-monospace small text-accent fw-bold">{{ materiel.code_vigile }}</div>
-            </div>
-            {% endif %}
+        <div class="field">
+            <input id="numero_serie" name="numero_serie" type="text" placeholder=" " value="{{ materiel.numero_serie if materiel else '' }}">
+            <label for="numero_serie">Numéro de série</label>
         </div>
-    </div>
-</div>
-
-<style>
-.form-container {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 20px;
-}
-.icon-circle {
-    width: 48px;
-    height: 48px;
-    background: var(--accent-color);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    box-shadow: 0 4px 15px rgba(108, 99, 255, 0.3);
-}
-.tracking-wider {
-    letter-spacing: 0.1em;
-}
-.qr-preview-small img {
-    max-width: 180px;
-}
-</style>
+        <div class="panel-grid two-up">
+            <div class="field">
+                <select id="etat" name="etat" required>
+                    {% for item in etats %}
+                    <option value="{{ item }}" {% if (materiel and materiel.etat == item) or (not materiel and item == 'neuf') %}selected{% endif %}>{{ item | capitalize }}</option>
+                    {% endfor %}
+                </select>
+                <label for="etat">État</label>
+            </div>
+            <div class="field">
+                <select id="emplacement" name="emplacement" required>
+                    {% for item in emplacements %}
+                    <option value="{{ item }}" {% if (materiel and materiel.emplacement == item) or (not materiel and item == 'réserve') %}selected{% endif %}>{{ item | replace('_', ' ') | capitalize }}</option>
+                    {% endfor %}
+                </select>
+                <label for="emplacement">Emplacement</label>
+            </div>
+        </div>
+        <div class="field">
+            <input id="date_acquisition" name="date_acquisition" type="date" placeholder=" " value="{{ materiel.date_acquisition.strftime('%Y-%m-%d') if materiel and materiel.date_acquisition else '' }}">
+            <label for="date_acquisition">Date d'acquisition</label>
+        </div>
+        <div class="field">
+            <textarea id="notes" name="notes" placeholder=" ">{{ materiel.notes if materiel else '' }}</textarea>
+            <label for="notes">Notes</label>
+        </div>
+        <div class="button-row">
+            <button class="btn btn-primary" type="submit">{{ 'Sauvegarder' if action == 'ajouter' else 'Mettre à jour' }}</button>
+            <a class="btn btn-secondary" href="{{ url_for('main.inventaire') }}">Annuler</a>
+        </div>
+    </form>
+</section>
 {% endblock %}

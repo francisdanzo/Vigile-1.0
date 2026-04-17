@@ -1,76 +1,37 @@
 {% extends "base.html" %}
 
-{% block title %}
-    {% if action == 'attribuer' %}Attribuer{% else %}Récupérer{% endif %}
-    — {{ materiel.code_vigile }} — {{ app_name }}
-{% endblock %}
+{% block title %}{% if action == 'attribuer' %}Attribuer{% else %}Récupérer{% endif %} - {{ materiel.code_vigile }}{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div class="card-header text-center">
-        <h1 class="card-title">
-            {% if action == 'attribuer' %}
-                👤 Attribuer le matériel
-            {% else %}
-                📦 Récupérer le matériel
-            {% endif %}
-        </h1>
-        <p class="card-subtitle">
-            <span style="color: var(--accent); font-weight: 700;">{{ materiel.code_vigile }}</span>
-            — {{ materiel.type | capitalize }}
-            {% if materiel.marque %} · {{ materiel.marque }}{% endif %}
-            {% if materiel.modele %} {{ materiel.modele }}{% endif %}
-        </p>
-    </div>
+<section>
+    <h1 class="page-title">{% if action == 'attribuer' %}Attribuer le matériel{% else %}Récupérer le matériel{% endif %}</h1>
+    <p class="page-subtitle">{{ materiel.code_vigile }} · {{ materiel.type | capitalize }}{% if materiel.marque %} · {{ materiel.marque }} {{ materiel.modele }}{% endif %}</p>
+</section>
 
+<section class="card">
     {% if action == 'attribuer' %}
-    <!-- Formulaire d'attribution -->
-    <form method="POST" action="{{ url_for('main.attribuer', code_vigile=materiel.code_vigile) }}">
-        <div class="form-group">
-            <label for="nom" class="form-label">Nom de la personne *</label>
-            <input type="text" id="nom" name="nom" class="form-input"
-                   placeholder="Prénom et nom" required autofocus
-                   autocomplete="name">
+    <form method="POST" action="{{ url_for('main.attribuer', code_vigile=materiel.code_vigile) }}" class="form-grid">
+        <div class="field">
+            <input id="nom" name="nom" type="text" placeholder=" " autocomplete="name" required autofocus>
+            <label for="nom">Nom de la personne</label>
         </div>
-
-        <div class="form-group">
-            <label for="notes" class="form-label">Notes (optionnel)</label>
-            <textarea id="notes" name="notes" class="form-input"
-                      placeholder="Ex: Bureau 204, projet XYZ..."
-                      rows="3"></textarea>
+        <div class="field">
+            <textarea id="notes" name="notes" placeholder=" "></textarea>
+            <label for="notes">Notes</label>
         </div>
-
-        <div class="btn-group mt-2">
-            <button type="submit" class="btn btn-success btn-lg">
-                ✅ Confirmer l'attribution
-            </button>
-            <a href="{{ url_for('main.fiche_materiel', code_vigile=materiel.code_vigile) }}"
-               class="btn btn-outline">
-                ← Retour
-            </a>
+        <div class="button-row">
+            <button class="btn btn-primary" type="submit">Confirmer l'attribution</button>
+            <a class="btn btn-secondary" href="{{ url_for('main.fiche_materiel', code_vigile=materiel.code_vigile) }}">Retour</a>
         </div>
     </form>
-
     {% else %}
-    <!-- Confirmation de récupération -->
-    <div class="text-center mt-2">
-        <p style="font-size: 18px; margin-bottom: 20px;">
-            Récupérer ce matériel de
-            <strong style="color: var(--accent-orange);">{{ materiel.attribue_a }}</strong> ?
-        </p>
-
-        <form method="POST" action="{{ url_for('main.recuperer', code_vigile=materiel.code_vigile) }}">
-            <div class="btn-group" style="justify-content: center;">
-                <button type="submit" class="btn btn-warning btn-lg">
-                    📦 Confirmer la récupération
-                </button>
-                <a href="{{ url_for('main.fiche_materiel', code_vigile=materiel.code_vigile) }}"
-                   class="btn btn-outline">
-                    ← Annuler
-                </a>
-            </div>
+    <div class="form-grid">
+        <p class="card-subtitle">Confirmez la récupération de cet équipement pour clôturer l’attribution active.</p>
+        <form method="POST" action="{{ url_for('main.recuperer', code_vigile=materiel.code_vigile) }}" class="button-row">
+            <button class="btn btn-danger" type="submit">Confirmer la récupération</button>
+            <a class="btn btn-secondary" href="{{ url_for('main.fiche_materiel', code_vigile=materiel.code_vigile) }}">Annuler</a>
         </form>
     </div>
     {% endif %}
-</div>
+</section>
 {% endblock %}

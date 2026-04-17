@@ -1,52 +1,35 @@
 {% extends "base.html" %}
 
-{% block title %}Connexion — {{ app_name }}{% endblock %}
+{% block title %}Connexion - {{ app_name }}{% endblock %}
+{% block screen_class %}login-screen{% endblock %}
 
 {% block content %}
-<div style="display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 140px);">
-    <div style="width: 100%; max-width: 380px;">
-        <!-- Logo et titre -->
-        <div class="text-center mb-3">
-            <div style="font-size: 56px; margin-bottom: 8px;">🛡</div>
-            <h1 style="font-size: 32px; font-weight: 800; background: linear-gradient(135deg, var(--accent), #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
-                {{ app_name }}
-            </h1>
-            <p style="color: var(--gold); font-style: italic; font-size: 14px; margin-top: 4px;">
-                {{ app_slogan }}
-            </p>
+<section class="card" style="min-height: calc(100vh - 36px); place-content: center; background: linear-gradient(180deg, rgba(17,17,24,0.9), rgba(13,13,20,0.95));">
+    <div style="display:grid; gap:18px; text-align:center;">
+        <div style="font-size:72px; line-height:1; filter: drop-shadow(0 18px 28px rgba(124,107,255,0.28));">🛡</div>
+        <div>
+            <h1 class="page-title" style="margin:0;">{{ app_name }}</h1>
+            <p class="page-subtitle" style="color: var(--gold); font-style: italic;">{{ app_slogan }}</p>
         </div>
-
-        <!-- Carte de connexion -->
-        <div class="card">
-            <div class="card-header text-center">
-                <h2 class="card-title">Connexion</h2>
-                <p class="card-subtitle">Accédez à votre espace VIGILE</p>
-            </div>
-
-            <form method="POST" action="{{ url_for('auth.login') }}">
-                <div class="form-group">
-                    <label for="username" class="form-label">Nom d'utilisateur</label>
-                    <input type="text" id="username" name="username" class="form-input"
-                           placeholder="Votre identifiant" required autofocus
-                           autocomplete="username">
-                </div>
-
-                <div class="form-group">
-                    <label for="password" class="form-label">Mot de passe</label>
-                    <input type="password" id="password" name="password" class="form-input"
-                           placeholder="••••••••" required
-                           autocomplete="current-password">
-                </div>
-
-                <button type="submit" class="btn btn-primary btn-block btn-lg mt-2">
-                    Se connecter
-                </button>
-            </form>
-        </div>
-
-        <p class="text-center text-muted mt-2" style="font-size: 12px;">
-            v{{ app_version }}
-        </p>
     </div>
-</div>
+    <div class="card" style="background: rgba(22,22,31,0.82); min-height: 400px;">
+        <div>
+            <h2 class="card-title">Connexion sécurisée</h2>
+            <p class="card-subtitle">Accès mobile et terrain au parc matériel.</p>
+        </div>
+        <form method="POST" action="{{ url_for('auth.login') }}" class="form-grid">
+            <div class="field">
+                <input id="username" name="username" type="text" placeholder=" " autocomplete="username" required autofocus>
+                <label for="username">Nom d'utilisateur</label>
+            </div>
+            <div class="field">
+                <input id="password" name="password" type="password" placeholder=" " autocomplete="current-password" required>
+                <label for="password">Mot de passe</label>
+            </div>
+            <p class="form-help">Les opérations critiques sont traçées automatiquement avec votre session.</p>
+            <button class="btn btn-primary btn-block" type="submit">Se connecter</button>
+        </form>
+        <div style="text-align:center; color:var(--text-muted); font-size:12px;">Version {{ app_version }}</div>
+    </div>
+</section>
 {% endblock %}

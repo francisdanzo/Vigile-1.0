@@ -1,187 +1,82 @@
 {% extends "base.html" %}
 
-{% block title %}Tableau de bord — {{ app_name }}{% endblock %}
+{% block title %}Dashboard - {{ app_name }}{% endblock %}
 
 {% block content %}
-<div class="dashboard-container animate-fade-in">
-    <!-- Header -->
-    <div class="row align-items-center mb-5">
-        <div class="col">
-            <h1 class="h2 mb-1">📊 Tableau de bord</h1>
-            <p class="text-secondary small mb-0">Vue d'ensemble en temps réel de votre parc informatique</p>
+<section>
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-subtitle">Vue synthétique du parc et de l’activité récente.</p>
+</section>
+
+<section class="panel-grid two-up">
+    <article class="stat-card">
+        <div class="stat-top">
+            <div class="stat-label">Total équipements</div>
+            <div class="stat-icon" style="background: rgba(77,166,255,0.14); color: var(--accent-info);">◫</div>
         </div>
-        <div class="col-auto">
-            <div class="text-end">
-                <div class="small text-muted">{{ now.strftime('%d %B %Y') }}</div>
-                <div class="fw-bold text-accent">{{ now.strftime('%H:%M') }}</div>
-            </div>
+        <div class="stat-value" data-count="{{ stats.total }}">0</div>
+    </article>
+    <article class="stat-card">
+        <div class="stat-top">
+            <div class="stat-label">Disponibles</div>
+            <div class="stat-icon" style="background: rgba(0,212,170,0.14); color: var(--accent-secondary);">✓</div>
         </div>
+        <div class="stat-value" data-count="{{ stats.disponible }}">0</div>
+    </article>
+    <article class="stat-card">
+        <div class="stat-top">
+            <div class="stat-label">En prêt</div>
+            <div class="stat-icon" style="background: rgba(255,179,71,0.16); color: var(--accent-warning);">👤</div>
+        </div>
+        <div class="stat-value" data-count="{{ stats.attribue }}">0</div>
+    </article>
+    <article class="stat-card">
+        <div class="stat-top">
+            <div class="stat-label">En maintenance</div>
+            <div class="stat-icon" style="background: rgba(255,92,122,0.16); color: var(--accent-danger);">⚠</div>
+        </div>
+        <div class="stat-value" data-count="{{ stats.en_panne }}">0</div>
+    </article>
+</section>
+
+<section class="card">
+    <div>
+        <h2 class="card-title">Activité récente</h2>
+        <p class="card-subtitle">Dernières attributions enregistrées dans VIGILE.</p>
     </div>
-
-    <!-- Stats Grid -->
-    <div class="row g-4 mb-5">
-        <!-- Total -->
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="card glass stat-card h-100 p-4 border-start-accent">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="text-secondary small text-uppercase fw-bold tracking-wider">Total Équipements</span>
-                    <span class="stat-icon bg-accent-dim text-accent">🛡</span>
+    <div class="activity-list">
+        {% for attr in activites %}
+        <article class="activity-item">
+            <div class="history-item-header">
+                <div>
+                    <div class="history-strong">{{ attr.materiel.code_vigile if attr.materiel else '—' }}</div>
+                    <div class="history-meta">{{ attr.attribue_a }}</div>
                 </div>
-                <div class="display-5 fw-bold mb-1">{{ stats.total }}</div>
-                <div class="small text-muted">Items enregistrés au total</div>
+                <span class="badge {% if attr.is_active %}badge-active{% else %}badge-neutral{% endif %}">
+                    {% if attr.is_active %}En prêt{% else %}Retourné{% endif %}
+                </span>
             </div>
-        </div>
-
-        <!-- Disponible -->
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="card glass stat-card h-100 p-4 border-start-success">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="text-secondary small text-uppercase fw-bold tracking-wider">Disponibles</span>
-                    <span class="stat-icon bg-success-dim text-accent-green">✅</span>
-                </div>
-                <div class="display-5 fw-bold mb-1">{{ stats.disponible }}</div>
-                <div class="small text-muted">Prêts à être attribués</div>
-            </div>
-        </div>
-
-        <!-- Attribué -->
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="card glass stat-card h-100 p-4 border-start-warning">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="text-secondary small text-uppercase fw-bold tracking-wider">En circulation</span>
-                    <span class="stat-icon bg-warning-dim text-accent-orange">👤</span>
-                </div>
-                <div class="display-5 fw-bold mb-1">{{ stats.attribue }}</div>
-                <div class="small text-muted">Actuellement en prêt</div>
-            </div>
-        </div>
-
-        <!-- En panne -->
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="card glass stat-card h-100 p-4 border-start-danger">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="text-secondary small text-uppercase fw-bold tracking-wider">En maintenance</span>
-                    <span class="stat-icon bg-danger-dim text-accent-red">⚠️</span>
-                </div>
-                <div class="display-5 fw-bold mb-1">{{ stats.en_panne }}</div>
-                <div class="small text-muted">Récupération ou réparation</div>
-            </div>
-        </div>
+            <div class="history-meta">Attribué le {{ attr.date_attribution.strftime('%d/%m/%Y %H:%M') }}</div>
+        </article>
+        {% else %}
+        <div class="empty-state">Aucune activité récente.</div>
+        {% endfor %}
     </div>
+</section>
+{% endblock %}
 
-    <div class="row g-4">
-        <!-- Recent Activity -->
-        <div class="col-lg-8">
-            <div class="card glass h-100">
-                <div class="card-header bg-transparent border-0 p-4 pb-0 d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">🕒 Activités Récentes</h5>
-                    <a href="{{ url_for('main.historique') }}" class="btn btn-sm btn-outline-secondary">Tout voir</a>
-                </div>
-                <div class="card-body p-4">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle">
-                            <thead class="text-muted small text-uppercase">
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Action</th>
-                                    <th>Équipement</th>
-                                    <th>Utilisateur</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in activites %}
-                                <tr>
-                                    <td class="small text-secondary">{{ item.date_attribution.strftime('%d/%m %H:%M') }}</td>
-                                    <td>
-                                        {% if item.is_active %}
-                                            <span class="badge bg-warning-dim text-accent-orange font-weight-normal border-0">Attribution</span>
-                                        {% else %}
-                                            <span class="badge bg-success-dim text-accent-green font-weight-normal border-0">Retour</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <a href="{{ url_for('main.fiche_materiel', code_vigile=item.materiel.code_vigile) }}" 
-                                           class="text-accent fw-bold font-monospace text-decoration-none small">
-                                           {{ item.materiel.code_vigile }}
-                                        </a>
-                                    </td>
-                                    <td class="small fw-medium">{{ item.attribue_a }}</td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="4" class="text-center py-4 text-muted small">Aucune activité récente</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Action Center -->
-        <div class="col-lg-4">
-            <div class="card glass h-100 p-4">
-                <h5 class="mb-4">⚡ Actions Rapides</h5>
-                <div class="d-grid gap-3">
-                    <a href="{{ url_for('main.scan') }}" class="btn btn-accent p-3 d-flex align-items-center justify-content-center gap-2">
-                        <span>📷</span> Lancer le Scanner
-                    </a>
-                    <a href="{{ url_for('main.ajouter_materiel') }}" class="btn btn-outline-secondary p-3 d-flex align-items-center justify-content-center gap-2">
-                        <span>➕</span> Ajouter un Matériel
-                    </a>
-                    <a href="{{ url_for('main.inventaire') }}" class="btn btn-outline-secondary p-3 d-flex align-items-center justify-content-center gap-2">
-                        <span>📋</span> Parcourir l'Inventaire
-                    </a>
-                </div>
-
-                <hr class="my-4 border-secondary opacity-25">
-
-                <div class="alert bg-accent-dim border-0 p-3 small mb-0">
-                    <div class="d-flex gap-2">
-                        <span class="text-accent">💡</span>
-                        <div class="text-accent">
-                            <strong>Conseil :</strong> Scannez le QR code pour attribuer ou récupérer un matériel rapidement sur le terrain.
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<style>
-.dashboard-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px;
-}
-.stat-card {
-    transition: var(--transition);
-}
-.stat-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-}
-.stat-icon {
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-}
-.border-start-accent { border-left: 4px solid var(--accent) !important; }
-.border-start-success { border-left: 4px solid var(--accent-green) !important; }
-.border-start-warning { border-left: 4px solid var(--accent-orange) !important; }
-.border-start-danger { border-left: 4px solid var(--accent-red) !important; }
-
-.bg-accent-dim { background: rgba(108, 99, 255, 0.1); }
-.bg-success-dim { background: rgba(0, 200, 150, 0.1); }
-.bg-warning-dim { background: rgba(255, 159, 67, 0.1); }
-.bg-danger-dim { background: rgba(255, 107, 107, 0.1); }
-
-.tracking-wider { letter-spacing: 0.1em; }
-</style>
+{% block scripts %}
+<script>
+    document.querySelectorAll('[data-count]').forEach((node) => {
+        const target = Number(node.dataset.count || 0);
+        const duration = 700;
+        const start = performance.now();
+        function step(now) {
+            const progress = Math.min((now - start) / duration, 1);
+            node.textContent = Math.round(target * progress);
+            if (progress < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    });
+</script>
 {% endblock %}

@@ -1,1298 +1,1125 @@
-# -*- coding: utf-8 -*-
-"""
-VIGILE — Fenêtre principale Tkinter
-"Chaque équipement a sa sentinelle"
-
-Ce module contient :
-- LoginFrame : écran de connexion au démarrage
-- MainWindow : fenêtre principale avec navigation latérale
-- DashboardFrame : tableau de bord avec statistiques
-- ServerFrame : contrôle du serveur Flask
-"""
+from __future__ import annotations
 
 import os
-import sys
 import socket
+import subprocess
+import sys
 import threading
-import tkinter as tk
-from tkinter import ttk, messagebox
-from datetime import datetime, timezone
+from datetime import datetime
+from pathlib import Path
+from typing import Callable
 
-# Ajouter le répertoire racine au path pour les imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import (
-    APP_NAME, APP_SLOGAN, APP_VERSION, FLASK_PORT,
-    TYPES_MATERIEL, ETATS_MATERIEL, EMPLACEMENTS_MATERIEL
+from PyQt6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QObject,
+    QPoint,
+    QPointF,
+    QPropertyAnimation,
+    QRectF,
+    QSize,
+    Qt,
+    QThread,
+    QTimer,
+    QVariantAnimation,
+    pyqtSignal,
 )
-from database import get_session, init_db
-from models import User, Materiel, Attribution
+from PyQt6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPainterPath, QPen, QPixmap
+from PyQt6.QtWidgets import (
+    QApplication,
+    QAbstractItemView,
+    QButtonGroup,
+    QFrame,
+    QGraphicsDropShadowEffect,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLayout,
+    QLineEdit,
+    QMainWindow,
+    QPlainTextEdit,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
-
-# =============================================================================
-# Palette de couleurs VIGILE
-# =============================================================================
+from config import APP_NAME, APP_SLOGAN, ETATS_MATERIEL, FLASK_PORT
+from database import get_session
+from models import Attribution, Materiel, User
+from qr.generator import generer_qr_code
+from tunnel import _get_cloudflared_path, telecharger_cloudflared
 
 COLORS = {
-    "bg_dark": "#0f0f1a",        # Fond principal sombre
-    "bg_sidebar": "#161625",     # Fond barre latérale
-    "bg_card": "#1c1c2e",        # Fond des cartes/panneaux
-    "bg_input": "#252540",       # Fond des champs de saisie
-    "bg_hover": "#2a2a45",       # Fond survol
-    "accent": "#6c63ff",         # Violet accent principal
-    "accent_hover": "#5a52d5",   # Violet survol
-    "accent_green": "#00c896",   # Vert succès
-    "accent_orange": "#ff9f43",  # Orange avertissement
-    "accent_red": "#ff6b6b",     # Rouge danger/erreur
-    "accent_blue": "#54a0ff",    # Bleu info
-    "text_primary": "#e8e8e8",   # Texte principal
-    "text_secondary": "#8888a0", # Texte secondaire
-    "text_muted": "#555570",     # Texte atténué
-    "border": "#2a2a45",         # Bordures
-    "gold": "#ffd700",           # Doré pour le slogan
+    "bg": "#0d0d14",
+    "sidebar": "#111118",
+    "card": "#16161f",
+    "input": "#1e1e2a",
+    "hover": "#22222e",
+    "primary": "#7c6bff",
+    "secondary": "#00d4aa",
+    "danger": "#ff5c7a",
+    "warning": "#ffb347",
+    "info": "#4da6ff",
+    "text": "#f0f0f8",
+    "text_secondary": "#9090aa",
+    "muted": "#4a4a60",
+    "border": "#2a2a38",
+    "gold": "#f0c040",
 }
 
+STATE_COLORS = {
+    "neuf": COLORS["secondary"],
+    "bon": COLORS["info"],
+    "usagé": COLORS["warning"],
+    "en_panne": COLORS["danger"],
+}
 
-# =============================================================================
-# Configuration du style ttk global
-# =============================================================================
-
-def configurer_style(root):
-    """Configure le thème ttk pour toute l'application."""
-    style = ttk.Style(root)
-    style.theme_use("clam")
-
-    # Treeview (tableaux)
-    style.configure(
-        "Vigile.Treeview",
-        background=COLORS["bg_card"],
-        foreground=COLORS["text_primary"],
-        fieldbackground=COLORS["bg_card"],
-        rowheight=32,
-        borderwidth=0,
-        font=("Segoe UI", 10)
-    )
-    style.configure(
-        "Vigile.Treeview.Heading",
-        background=COLORS["bg_sidebar"],
-        foreground=COLORS["accent"],
-        font=("Segoe UI", 10, "bold"),
-        borderwidth=0,
-        relief="flat"
-    )
-    style.map(
-        "Vigile.Treeview",
-        background=[("selected", COLORS["accent"])],
-        foreground=[("selected", "#ffffff")]
-    )
-
-    # Scrollbar
-    style.configure(
-        "Vigile.Vertical.TScrollbar",
-        background=COLORS["bg_sidebar"],
-        troughcolor=COLORS["bg_dark"],
-        borderwidth=0,
-        arrowsize=0
-    )
-
-    return style
+QSS_PATH = Path(__file__).resolve().parent.parent / "vigile_theme.qss"
 
 
-# =============================================================================
-# Widgets personnalisés réutilisables
-# =============================================================================
+def alpha(color: str, value: int) -> str:
+    qcolor = QColor(color)
+    return f"rgba({qcolor.red()}, {qcolor.green()}, {qcolor.blue()}, {value})"
 
-class VigileButton(tk.Canvas):
-    """Bouton personnalisé avec coins arrondis et effets de survol."""
 
-    def __init__(self, parent, text, command=None, color=None,
-                 width=180, height=40, font_size=11, **kwargs):
-        super().__init__(
-            parent, width=width, height=height,
-            bg=parent.cget("bg") if hasattr(parent, "cget") else COLORS["bg_dark"],
-            highlightthickness=0, **kwargs
+def clear_layout(layout: QLayout) -> None:
+    while layout.count():
+        item = layout.takeAt(0)
+        widget = item.widget()
+        child_layout = item.layout()
+        if widget:
+            widget.deleteLater()
+        elif child_layout:
+            clear_layout(child_layout)
+
+
+def apply_shadow(widget: QWidget, blur: int = 30, y_offset: int = 12, alpha_value: int = 110) -> None:
+    shadow = QGraphicsDropShadowEffect(widget)
+    shadow.setBlurRadius(blur)
+    shadow.setOffset(0, y_offset)
+    color = QColor("#000000")
+    color.setAlpha(alpha_value)
+    shadow.setColor(color)
+    widget.setGraphicsEffect(shadow)
+
+
+def load_theme(app: QApplication) -> None:
+    for path in (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+        "C:/Windows/Fonts/segoeui.ttf",
+    ):
+        if os.path.exists(path):
+            QFontDatabase.addApplicationFont(path)
+    if QSS_PATH.exists():
+        app.setStyleSheet(QSS_PATH.read_text(encoding="utf-8"))
+    app.setFont(QFont("Inter", 10))
+
+
+class WorkerSignals(QObject):
+    finished = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+
+class FunctionWorker(QObject):
+    def __init__(self, fn: Callable, *args, **kwargs):
+        super().__init__()
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = WorkerSignals()
+
+    def run(self) -> None:
+        try:
+            result = self.fn(*self.args, **self.kwargs)
+            self.signals.finished.emit(result)
+        except Exception as exc:
+            self.signals.failed.emit(str(exc))
+
+
+def run_in_thread(parent: QObject, fn: Callable, on_success: Callable, on_error: Callable | None = None, *args, **kwargs) -> QThread:
+    # Centralise les tâches BD/réseau pour garder l'UI PyQt6 fluide.
+    thread = QThread(parent)
+    worker = FunctionWorker(fn, *args, **kwargs)
+    # Conserver des références explicites évite que Qt/Python libèrent le thread
+    # avant que les signaux de fin n'aient le temps de revenir vers l'UI.
+    if not hasattr(parent, "_worker_threads"):
+        parent._worker_threads = set()
+    parent._worker_threads.add(thread)
+    thread._worker = worker
+    worker.moveToThread(thread)
+    thread.started.connect(worker.run)
+    worker.signals.finished.connect(on_success)
+    if on_error:
+        worker.signals.failed.connect(on_error)
+    worker.signals.finished.connect(thread.quit)
+    worker.signals.failed.connect(thread.quit)
+    worker.signals.finished.connect(worker.deleteLater)
+    worker.signals.failed.connect(worker.deleteLater)
+    thread.finished.connect(lambda: parent._worker_threads.discard(thread))
+    thread.finished.connect(thread.deleteLater)
+    thread.start()
+    return thread
+
+
+class StyledCard(QFrame):
+    def __init__(self, parent: QWidget | None = None, padding: int = 18):
+        super().__init__(parent)
+        self.setObjectName("Card")
+        self._border = QColor(COLORS["border"])
+        self._animation = QVariantAnimation(self, duration=200)
+        self._animation.setStartValue(QColor(COLORS["border"]))
+        self._animation.setEndValue(QColor(COLORS["primary"]))
+        self._animation.valueChanged.connect(self._on_border_change)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(padding, padding, padding, padding)
+        layout.setSpacing(12)
+        apply_shadow(self, blur=34, y_offset=10, alpha_value=90)
+
+    def _on_border_change(self, color: QColor) -> None:
+        self._border = color
+        self.update()
+
+    def enterEvent(self, event) -> None:
+        self._animation.setDirection(QPropertyAnimation.Direction.Forward)
+        self._animation.start()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._animation.setDirection(QPropertyAnimation.Direction.Backward)
+        self._animation.start()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event) -> None:
+        # La bordure est peinte manuellement pour animer la mise en avant au survol.
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(QColor(COLORS["card"]))
+        painter.setPen(QPen(self._border, 1))
+        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 12, 12)
+
+
+class StatusBadge(QLabel):
+    def __init__(self, state: str, text: str | None = None):
+        super().__init__(text or state.replace("_", " ").capitalize())
+        color = STATE_COLORS.get(state, COLORS["info"])
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setStyleSheet(
+            f"QLabel {{ background-color: {alpha(color, 45)}; color: {color}; "
+            "padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: bold; }}"
         )
-        self.command = command
-        self.color = color or COLORS["accent"]
-        self.hover_color = self._lighten(self.color)
-        self.text = text
-        self.width = width
-        self.height = height
-        self.font_size = font_size
-        self._active_color = self.color
-
-        self._draw()
-
-        self.bind("<Enter>", self._on_enter)
-        self.bind("<Leave>", self._on_leave)
-        self.bind("<Button-1>", self._on_click)
-
-    def _lighten(self, hex_color):
-        """Éclaircit une couleur hexadécimale."""
-        r = min(255, int(hex_color[1:3], 16) + 25)
-        g = min(255, int(hex_color[3:5], 16) + 25)
-        b = min(255, int(hex_color[5:7], 16) + 25)
-        return f"#{r:02x}{g:02x}{b:02x}"
-
-    def _draw(self):
-        """Dessine le bouton avec coins arrondis."""
-        self.delete("all")
-        r = 8  # rayon des coins
-        w, h = self.width, self.height
-        # Rectangle arrondi
-        self.create_arc(0, 0, 2*r, 2*r, start=90, extent=90,
-                       fill=self._active_color, outline="")
-        self.create_arc(w-2*r, 0, w, 2*r, start=0, extent=90,
-                       fill=self._active_color, outline="")
-        self.create_arc(0, h-2*r, 2*r, h, start=180, extent=90,
-                       fill=self._active_color, outline="")
-        self.create_arc(w-2*r, h-2*r, w, h, start=270, extent=90,
-                       fill=self._active_color, outline="")
-        self.create_rectangle(r, 0, w-r, h, fill=self._active_color, outline="")
-        self.create_rectangle(0, r, w, h-r, fill=self._active_color, outline="")
-        # Texte centré
-        self.create_text(
-            w//2, h//2, text=self.text,
-            fill="#ffffff", font=("Segoe UI", self.font_size, "bold")
-        )
-
-    def _on_enter(self, event):
-        self._active_color = self.hover_color
-        self._draw()
-
-    def _on_leave(self, event):
-        self._active_color = self.color
-        self._draw()
-
-    def _on_click(self, event):
-        if self.command:
-            self.command()
 
 
-class VigileEntry(tk.Frame):
-    """Champ de saisie stylisé avec label optionnel."""
+class VigileInput(QFrame):
+    def __init__(self, label: str, placeholder: str = "", password: bool = False):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        title = QLabel(label)
+        title.setObjectName("CaptionLabel")
+        layout.addWidget(title)
+        self.input = QLineEdit()
+        self.input.setPlaceholderText(placeholder)
+        if password:
+            self.input.setEchoMode(QLineEdit.EchoMode.Password)
+        glow = QGraphicsDropShadowEffect(self.input)
+        glow.setBlurRadius(18)
+        glow.setOffset(0, 0)
+        glow_color = QColor(COLORS["primary"])
+        glow_color.setAlpha(80)
+        glow.setColor(glow_color)
+        glow.setEnabled(False)
+        self._glow = glow
+        self.input.setGraphicsEffect(glow)
+        self.input.installEventFilter(self)
+        layout.addWidget(self.input)
 
-    def __init__(self, parent, label="", placeholder="", show="", **kwargs):
-        super().__init__(parent, bg=COLORS["bg_card"])
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is self.input and event.type() in (QEvent.Type.FocusIn, QEvent.Type.FocusOut):
+            self._glow.setEnabled(event.type() == QEvent.Type.FocusIn)
+        return super().eventFilter(watched, event)
 
-        if label:
-            lbl = tk.Label(
-                self, text=label, bg=COLORS["bg_card"],
-                fg=COLORS["text_secondary"],
-                font=("Segoe UI", 10), anchor="w"
-            )
-            lbl.pack(fill="x", pady=(0, 4))
+    def text(self) -> str:
+        return self.input.text().strip()
 
-        self.entry_frame = tk.Frame(
-            self, bg=COLORS["bg_input"],
-            highlightbackground=COLORS["border"],
-            highlightthickness=1, highlightcolor=COLORS["accent"]
-        )
-        self.entry_frame.pack(fill="x")
+    def setText(self, value: str) -> None:
+        self.input.setText(value)
 
-        entry_kwargs = {
-            "bg": COLORS["bg_input"],
-            "fg": COLORS["text_primary"],
-            "insertbackground": COLORS["accent"],
-            "font": ("Segoe UI", 11),
-            "relief": "flat",
-            "bd": 8,
+
+class VigileButton(QPushButton):
+    def __init__(self, text: str, variant: str = "primary", parent: QWidget | None = None):
+        super().__init__(text, parent)
+        self.variant = variant
+        self._cached_text = text
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._anim = QPropertyAnimation(self, b"iconSize", self)
+        self._anim.setDuration(120)
+        self._anim.setStartValue(QSize(18, 18))
+        self._anim.setEndValue(QSize(16, 16))
+        self.setIconSize(QSize(18, 18))
+        self._apply_variant()
+
+    def _apply_variant(self) -> None:
+        variants = {
+            "primary": (COLORS["primary"], "#ffffff", "transparent"),
+            "secondary": ("transparent", COLORS["text"], COLORS["border"]),
+            "danger": (COLORS["danger"], "#ffffff", "transparent"),
+            "ghost": (COLORS["hover"], COLORS["text"], "transparent"),
         }
-        if show:
-            entry_kwargs["show"] = show
-
-        self.entry = tk.Entry(self.entry_frame, **entry_kwargs)
-        self.entry.pack(fill="x")
-
-        # Placeholder
-        self._is_placeholder_active = False
-        if placeholder:
-            self._placeholder = placeholder
-            self._is_placeholder_active = True
-            self.entry.insert(0, placeholder)
-            self.entry.config(fg=COLORS["text_muted"])
-            self.entry.bind("<FocusIn>", self._on_focus_in)
-            self.entry.bind("<FocusOut>", self._on_focus_out)
-
-    def _on_focus_in(self, event):
-        if self._is_placeholder_active:
-            self.entry.delete(0, "end")
-            self.entry.config(fg=COLORS["text_primary"])
-            self._is_placeholder_active = False
-
-    def _on_focus_out(self, event):
-        if not self.entry.get():
-            self._is_placeholder_active = True
-            self.entry.insert(0, self._placeholder)
-            self.entry.config(fg=COLORS["text_muted"])
-
-    def get(self):
-        """Retourne la valeur saisie (ignore le placeholder)."""
-        if getattr(self, "_is_placeholder_active", False):
-            return ""
-        return self.entry.get()
-
-    def set(self, value):
-        """Définit la valeur du champ."""
-        self.entry.delete(0, "end")
-        self.entry.insert(0, value)
-        self.entry.config(fg=COLORS["text_primary"])
-        self._is_placeholder_active = False
-
-    def clear(self):
-        """Vide le champ."""
-        self.entry.delete(0, "end")
-        if hasattr(self, "_placeholder"):
-            self._is_placeholder_active = True
-            self.entry.insert(0, self._placeholder)
-            self.entry.config(fg=COLORS["text_muted"])
-        else:
-            self._is_placeholder_active = False
-
-
-# =============================================================================
-# LoginFrame — Écran de connexion
-# =============================================================================
-
-class LoginFrame(tk.Frame):
-    """
-    Écran de connexion affiché au démarrage.
-    Authentifie l'utilisateur via username/password (bcrypt).
-    """
-
-    def __init__(self, parent, on_login_success):
-        """
-        Args:
-            parent: Widget parent (root)
-            on_login_success: Callback appelé avec l'objet User après connexion
-        """
-        super().__init__(parent, bg=COLORS["bg_dark"])
-        self.on_login_success = on_login_success
-        self._construire_interface()
-
-    def _construire_interface(self):
-        """Construit l'interface de connexion."""
-        # Centrer le contenu
-        container = tk.Frame(self, bg=COLORS["bg_dark"])
-        container.place(relx=0.5, rely=0.5, anchor="center")
-
-        # Logo / Titre
-        titre = tk.Label(
-            container, text="🛡 VIGILE",
-            bg=COLORS["bg_dark"], fg=COLORS["accent"],
-            font=("Segoe UI", 36, "bold")
+        bg, fg, border = variants.get(self.variant, variants["primary"])
+        hover_bg = COLORS["hover"] if bg == "transparent" else bg
+        self.setStyleSheet(
+            f"QPushButton {{ background-color: {bg}; color: {fg}; border: 1px solid {border}; "
+            f"border-radius: 8px; padding: 10px 18px; font-weight: bold; }}"
+            f"QPushButton:hover {{ background-color: {hover_bg}; border: 1px solid {COLORS['primary']}; }}"
+            f"QPushButton:disabled {{ color: {COLORS['muted']}; border: 1px solid {border}; }}"
         )
-        titre.pack(pady=(0, 5))
 
-        slogan = tk.Label(
-            container, text=APP_SLOGAN,
-            bg=COLORS["bg_dark"], fg=COLORS["gold"],
-            font=("Segoe UI", 12, "italic")
+    def set_loading(self, loading: bool) -> None:
+        self.setDisabled(loading)
+        self.setText("Chargement..." if loading else self._cached_text)
+
+    def mousePressEvent(self, event) -> None:
+        self._anim.setDirection(QPropertyAnimation.Direction.Forward)
+        self._anim.start()
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._anim.setDirection(QPropertyAnimation.Direction.Backward)
+        self._anim.start()
+        super().mouseReleaseEvent(event)
+
+
+class SidebarButton(QPushButton):
+    clicked_with_key = pyqtSignal(str)
+
+    def __init__(self, key: str, label: str, icon: str):
+        super().__init__(f"{icon}  {label}")
+        self.key = key
+        self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet(
+            f"QPushButton {{ text-align: left; padding: 12px 16px; border-radius: 10px; "
+            f"background: transparent; color: {COLORS['text_secondary']}; font-weight: 500; }}"
+            f"QPushButton:hover {{ background: {COLORS['hover']}; color: {COLORS['text']}; }}"
+            f"QPushButton:checked {{ background: {alpha(COLORS['primary'], 42)}; color: {COLORS['text']}; "
+            f"border-left: 3px solid {COLORS['primary']}; padding-left: 13px; }}"
         )
-        slogan.pack(pady=(0, 30))
+        self.clicked.connect(lambda: self.clicked_with_key.emit(self.key))
 
-        # Carte de connexion
-        card = tk.Frame(
-            container, bg=COLORS["bg_card"],
-            highlightbackground=COLORS["border"],
-            highlightthickness=1
-        )
-        card.pack(padx=40, pady=10, ipadx=30, ipady=25)
 
-        tk.Label(
-            card, text="Connexion", bg=COLORS["bg_card"],
-            fg=COLORS["text_primary"], font=("Segoe UI", 18, "bold")
-        ).pack(pady=(10, 20))
+class VigileTable(QTableWidget):
+    def __init__(self, columns: list[str], parent: QWidget | None = None):
+        super().__init__(0, len(columns), parent)
+        self.setHorizontalHeaderLabels([column.upper() for column in columns])
+        self.verticalHeader().setVisible(False)
+        self.setAlternatingRowColors(True)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.setShowGrid(False)
+        self.horizontalHeader().setStretchLastSection(True)
+        self.setSortingEnabled(True)
 
-        # Champ username
-        self.username_field = VigileEntry(
-            card, label="Nom d'utilisateur", placeholder=""
-        )
-        self.username_field.pack(fill="x", padx=20, pady=(0, 12))
-        self.username_field.set("admin")
+    def empty(self, message: str) -> None:
+        self.setRowCount(1)
+        self.setSpan(0, 0, 1, self.columnCount())
+        item = QTableWidgetItem(message)
+        item.setForeground(QColor(COLORS["muted"]))
+        self.setItem(0, 0, item)
 
-        # Champ password
-        self.password_field = VigileEntry(
-            card, label="Mot de passe", placeholder="••••••••", show="•"
-        )
-        self.password_field.pack(fill="x", padx=20, pady=(0, 20))
 
-        # Message d'erreur (caché par défaut)
-        self.error_label = tk.Label(
-            card, text="", bg=COLORS["bg_card"],
-            fg=COLORS["accent_red"], font=("Segoe UI", 10)
-        )
-        self.error_label.pack(pady=(0, 10))
+class KPIValueLabel(QLabel):
+    def animate_to(self, value: int) -> None:
+        animation = QVariantAnimation(self, duration=1000)
+        animation.setStartValue(0)
+        animation.setEndValue(value)
+        animation.valueChanged.connect(lambda current: self.setText(str(int(current))))
+        animation.start()
+        self._animation = animation
 
-        # Bouton connexion
-        btn = VigileButton(
-            card, text="Se connecter", command=self._tenter_connexion,
-            width=220, height=42
-        )
-        btn.pack(pady=(0, 15))
 
-        # Version
-        tk.Label(
-            container, text=f"v{APP_VERSION}",
-            bg=COLORS["bg_dark"], fg=COLORS["text_muted"],
-            font=("Segoe UI", 9)
-        ).pack(pady=(20, 0))
+class DonutChart(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.items: list[tuple[str, int, str]] = []
+        self.total = 0
+        self.setMinimumHeight(260)
 
-        # Bind Enter key
-        self.username_field.entry.bind("<Return>", lambda e: self._tenter_connexion())
-        self.password_field.entry.bind("<Return>", lambda e: self._tenter_connexion())
+    def set_data(self, items: list[tuple[str, int, str]]) -> None:
+        self.items = items
+        self.total = sum(value for _, value, _ in items)
+        self.update()
 
-        # Focus sur le champ username
-        self.after(100, lambda: self.username_field.entry.focus_set())
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self.total <= 0:
+            painter.setPen(QColor(COLORS["muted"]))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Aucune donnée")
+            return
+        circle = QRectF(26, 24, 220, 220)
+        angle_start = 90 * 16
+        for label, value, color in self.items:
+            span = -int(360 * 16 * (value / self.total))
+            painter.setPen(QPen(QColor(color), 18))
+            painter.drawArc(circle, angle_start, span)
+            angle_start += span
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(COLORS["card"]))
+        painter.drawEllipse(circle.adjusted(42, 42, -42, -42))
+        painter.setPen(QColor(COLORS["text"]))
+        painter.drawText(circle.adjusted(42, 42, -42, -42), Qt.AlignmentFlag.AlignCenter, f"{self.total}\nunités")
+        y = 56
+        for label, value, color in self.items:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(color))
+            painter.drawEllipse(QRectF(272, y, 10, 10))
+            painter.setPen(QColor(COLORS["text"]))
+            painter.drawText(QRectF(290, y - 8, 160, 24), 0, f"{label} ({value})")
+            y += 28
 
-    def _tenter_connexion(self):
-        """Vérifie les credentials et connecte l'utilisateur."""
-        username = self.username_field.get()
-        password = self.password_field.get()
 
+class PulseIndicator(QWidget):
+    def __init__(self, color: str):
+        super().__init__()
+        self._radius = 8.0
+        self.color = QColor(color)
+        self.animation = QVariantAnimation(self, duration=1200)
+        self.animation.setStartValue(8.0)
+        self.animation.setEndValue(14.0)
+        self.animation.setLoopCount(-1)
+        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.animation.valueChanged.connect(self._set_radius)
+        self.setFixedSize(24, 24)
+
+    def _set_radius(self, radius: float) -> None:
+        self._radius = radius
+        self.update()
+
+    def start(self) -> None:
+        self.animation.start()
+
+    def stop(self) -> None:
+        self.animation.stop()
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        glow = QColor(self.color)
+        glow.setAlpha(70)
+        painter.setBrush(glow)
+        painter.drawEllipse(QPointF(12, 12), self._radius, self._radius)
+        painter.setBrush(self.color)
+        painter.drawEllipse(QPointF(12, 12), 5, 5)
+
+
+class TitleBar(QFrame):
+    def __init__(self, window: "VigileWindow"):
+        super().__init__(window)
+        self.window = window
+        self.setObjectName("TitleBar")
+        self._drag_position: QPoint | None = None
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 10, 16, 10)
+        layout.setSpacing(12)
+        brand = QLabel(f"🛡  {APP_NAME}")
+        brand.setStyleSheet("font-size: 14px; font-weight: 600;")
+        layout.addWidget(brand)
+        layout.addStretch(1)
+        for label, handler in (("—", self.window.showMinimized), ("▢", self.window.toggle_maximize), ("✕", self.window.close)):
+            button = QPushButton(label)
+            button.setObjectName("TitleButton")
+            button.clicked.connect(handler)
+            layout.addWidget(button)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_position = event.globalPosition().toPoint() - self.window.frameGeometry().topLeft()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_position and event.buttons() & Qt.MouseButton.LeftButton:
+            self.window.move(event.globalPosition().toPoint() - self._drag_position)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_position = None
+        super().mouseReleaseEvent(event)
+
+
+class LoginFrame(QWidget):
+    login_success = pyqtSignal(dict)
+
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(32, 32, 32, 32)
+        layout.addStretch(1)
+        center = QWidget()
+        center_layout = QVBoxLayout(center)
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        center_layout.setSpacing(18)
+        self.logo = QLabel("🛡")
+        self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.logo.setStyleSheet(f"font-size: 74px; color: {COLORS['primary']};")
+        center_layout.addWidget(self.logo)
+        title = QLabel(APP_NAME)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("font-size: 32px; font-weight: 600;")
+        center_layout.addWidget(title)
+        slogan = QLabel(APP_SLOGAN)
+        slogan.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        slogan.setStyleSheet(f"color: {COLORS['gold']}; font-style: italic;")
+        center_layout.addWidget(slogan)
+        self.card = StyledCard()
+        self.card.setMaximumWidth(560)
+        self.card.setMinimumWidth(320)
+        self.card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        card_layout = self.card.layout()
+        heading = QLabel("Connexion sécurisée")
+        heading.setObjectName("PageTitle")
+        caption = QLabel("Administration du parc, traçabilité et tunnel terrain.")
+        caption.setObjectName("MutedLabel")
+        card_layout.addWidget(heading)
+        card_layout.addWidget(caption)
+        self.username = VigileInput("Identifiant", "Nom d'utilisateur")
+        self.password = VigileInput("Mot de passe", "••••••••", password=True)
+        card_layout.addWidget(self.username)
+        card_layout.addWidget(self.password)
+        self.error_label = QLabel("")
+        self.error_label.setStyleSheet(f"color: {COLORS['danger']};")
+        card_layout.addWidget(self.error_label)
+        self.submit = VigileButton("Se connecter", "primary")
+        self.submit.clicked.connect(self.authenticate)
+        self.submit.setMinimumHeight(48)
+        card_layout.addStretch(1)
+        card_layout.addWidget(self.submit)
+        center_layout.addWidget(self.card)
+        layout.addWidget(center)
+        layout.addStretch(1)
+        self.setMinimumWidth(0)
+        self.username.input.returnPressed.connect(self.authenticate)
+        self.password.input.returnPressed.connect(self.authenticate)
+        self._intro()
+
+    def _intro(self) -> None:
+        # L'animation reste sobre pour donner un signal premium sans ralentir la saisie.
+        animation = QVariantAnimation(self, duration=800)
+        animation.setStartValue(0.8)
+        animation.setEndValue(1.0)
+        animation.valueChanged.connect(lambda value: self.logo.setStyleSheet(f"font-size: {int(74 * value)}px; color: {COLORS['primary']};"))
+        animation.start()
+        self._animation = animation
+
+    def _shake(self) -> None:
+        animation = QPropertyAnimation(self.card, b"pos", self)
+        animation.setDuration(280)
+        animation.setKeyValueAt(0.0, self.card.pos())
+        animation.setKeyValueAt(0.25, self.card.pos() + QPoint(-10, 0))
+        animation.setKeyValueAt(0.5, self.card.pos() + QPoint(10, 0))
+        animation.setKeyValueAt(0.75, self.card.pos() + QPoint(-6, 0))
+        animation.setKeyValueAt(1.0, self.card.pos())
+        animation.start()
+        self._shake_animation = animation
+
+    @staticmethod
+    def _authenticate(username: str, password: str) -> dict:
+        session = get_session()
+        try:
+            user = session.query(User).filter_by(username=username, is_active=True).first()
+            if not user or not user.check_password(password):
+                raise ValueError("Nom d'utilisateur ou mot de passe incorrect.")
+            return {"id": user.id, "username": user.username, "role": user.role, "email": user.email}
+        finally:
+            session.close()
+
+    def authenticate(self) -> None:
+        username = self.username.text()
+        password = self.password.text()
         if not username or not password:
-            self.error_label.config(text="Veuillez remplir tous les champs.")
+            self.error_label.setText("Renseignez vos identifiants.")
+            self._shake()
             return
+        self.submit.set_loading(True)
+        self.error_label.clear()
+        self._auth_thread = run_in_thread(self, self._authenticate, self._on_auth_success, self._on_auth_error, username, password)
 
-        session = get_session()
-        try:
-            user = session.query(User).filter_by(
-                username=username, is_active=True
-            ).first()
+    def _on_auth_success(self, user_data: dict) -> None:
+        self.submit.set_loading(False)
+        self.submit.setText("Ouverture...")
+        self.login_success.emit(user_data)
 
-            if user and user.check_password(password):
-                self.error_label.config(text="")
-                # Stocker les infos nécessaires avant de fermer la session
-                user_id = user.id
-                user_username = user.username
-                user_role = user.role
-                session.close()
-                # Créer un objet dict pour transporter les infos
-                user_info = {
-                    "id": user_id,
-                    "username": user_username,
-                    "role": user_role
-                }
-                self.on_login_success(user_info)
-            else:
-                self.error_label.config(
-                    text="Nom d'utilisateur ou mot de passe incorrect."
-                )
-                self.password_field.clear()
-        except Exception as e:
-            self.error_label.config(text=f"Erreur de connexion : {e}")
-        finally:
-            session.close()
+    def _on_auth_error(self, message: str) -> None:
+        self.submit.set_loading(False)
+        self.error_label.setText(message)
+        self._shake()
 
 
-# =============================================================================
-# DashboardFrame — Tableau de bord avec statistiques
-# =============================================================================
+class DashboardFrame(QWidget):
+    navigate = pyqtSignal(str)
 
-class DashboardFrame(tk.Frame):
-    """
-    Tableau de bord principal avec cartes de statistiques.
-    Affiche : total matériel, attribué, disponible, en panne.
-    """
-
-    def __init__(self, parent):
-        super().__init__(parent, bg=COLORS["bg_dark"])
-        self._construire_interface()
-
-    def _construire_interface(self):
-        """Construit le tableau de bord."""
-        # Titre
-        header = tk.Frame(self, bg=COLORS["bg_dark"])
-        header.pack(fill="x", padx=30, pady=(25, 20))
-
-        tk.Label(
-            header, text="📊 Tableau de bord",
-            bg=COLORS["bg_dark"], fg=COLORS["text_primary"],
-            font=("Segoe UI", 22, "bold"), anchor="w"
-        ).pack(side="left")
-
-        # Bouton rafraîchir
-        VigileButton(
-            header, text="↻ Actualiser", command=self.rafraichir,
-            width=130, height=34, font_size=10,
-            color=COLORS["bg_card"]
-        ).pack(side="right")
-
-        # Zone des cartes de statistiques
-        self.cards_frame = tk.Frame(self, bg=COLORS["bg_dark"])
-        self.cards_frame.pack(fill="x", padx=30, pady=10)
-
-        # Stocker les labels pour mise à jour
-        self.stat_labels = {}
-
-        # Créer les 4 cartes
-        cartes_config = [
-            ("total", "📦 Total matériel", COLORS["accent_blue"], "0"),
-            ("attribue", "👤 Attribué", COLORS["accent_orange"], "0"),
-            ("disponible", "✅ Disponible", COLORS["accent_green"], "0"),
-            ("en_panne", "⚠ En panne", COLORS["accent_red"], "0"),
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
+        top = QHBoxLayout()
+        titles = QVBoxLayout()
+        title = QLabel("Tableau de bord")
+        title.setObjectName("PageTitle")
+        self.clock_label = QLabel("")
+        self.clock_label.setObjectName("MutedLabel")
+        titles.addWidget(title)
+        titles.addWidget(self.clock_label)
+        top.addLayout(titles)
+        top.addStretch(1)
+        layout.addLayout(top)
+        self.clock_timer = QTimer(self)
+        self.clock_timer.timeout.connect(self._update_clock)
+        self.clock_timer.start(1000)
+        self._update_clock()
+        self.kpi_layout = QGridLayout()
+        self.kpi_layout.setSpacing(14)
+        self.kpis: dict[str, KPIValueLabel] = {}
+        specs = [
+            ("total", "Total équipements", "◫", COLORS["info"]),
+            ("disponible", "Disponibles", "✓", COLORS["secondary"]),
+            ("attribue", "En prêt", "👤", COLORS["warning"]),
+            ("maintenance", "En maintenance", "⚠", COLORS["danger"]),
         ]
-
-        for i, (key, titre, couleur, valeur) in enumerate(cartes_config):
-            card = self._creer_carte(
-                self.cards_frame, titre, valeur, couleur, i
+        for index, (key, text, icon, color) in enumerate(specs):
+            card = StyledCard()
+            card_layout = card.layout()
+            badge = QLabel(icon)
+            badge.setStyleSheet(
+                f"background: {alpha(color, 36)}; color: {color}; padding: 8px; border-radius: 10px; font-size: 18px;"
             )
-            self.stat_labels[key] = card
+            card_layout.addWidget(badge, alignment=Qt.AlignmentFlag.AlignLeft)
+            label = QLabel(text)
+            label.setObjectName("MutedLabel")
+            value = KPIValueLabel("0")
+            value.setStyleSheet("font-size: 28px; font-weight: 600;")
+            card_layout.addWidget(label)
+            card_layout.addWidget(value)
+            self.kpis[key] = value
+            self.kpi_layout.addWidget(card, index // 2, index % 2)
+        layout.addLayout(self.kpi_layout)
+        lower = QHBoxLayout()
+        lower.setSpacing(18)
+        distribution = StyledCard()
+        distribution.layout().addWidget(QLabel("Répartition par état"))
+        self.chart = DonutChart()
+        distribution.layout().addWidget(self.chart)
+        lower.addWidget(distribution, 1)
+        activity = StyledCard()
+        activity.layout().addWidget(QLabel("Dernières attributions"))
+        self.activity_table = VigileTable(["Matériel", "Attribué à", "Date"])
+        self.activity_table.setMaximumHeight(280)
+        activity.layout().addWidget(self.activity_table)
+        lower.addWidget(activity, 1)
+        layout.addLayout(lower)
+        quick = StyledCard()
+        quick.layout().addWidget(QLabel("Accès rapide"))
+        quick_row = QHBoxLayout()
+        for key, label in (("inventory", "Ouvrir inventaire"), ("add", "Ajouter un matériel"), ("server", "Piloter le serveur")):
+            button = VigileButton(label, "secondary")
+            button.clicked.connect(lambda checked=False, destination=key: self.navigate.emit(destination))
+            quick_row.addWidget(button)
+        quick.layout().addLayout(quick_row)
+        layout.addWidget(quick)
+        self.refresh()
 
-        # Zone d'activité récente
-        recent_frame = tk.Frame(self, bg=COLORS["bg_dark"])
-        recent_frame.pack(fill="both", expand=True, padx=30, pady=(20, 15))
+    def _update_clock(self) -> None:
+        self.clock_label.setText(datetime.now().strftime("%A %d %B %Y · %H:%M:%S"))
 
-        tk.Label(
-            recent_frame, text="🕐 Activité récente",
-            bg=COLORS["bg_dark"], fg=COLORS["text_primary"],
-            font=("Segoe UI", 16, "bold"), anchor="w"
-        ).pack(fill="x", pady=(0, 10))
-
-        # Treeview pour les dernières actions
-        tree_container = tk.Frame(recent_frame, bg=COLORS["bg_card"])
-        tree_container.pack(fill="both", expand=True)
-
-        colonnes = ("date", "action", "materiel", "personne")
-        self.tree_recent = ttk.Treeview(
-            tree_container, columns=colonnes, show="headings",
-            style="Vigile.Treeview", height=8
-        )
-        self.tree_recent.heading("date", text="Date")
-        self.tree_recent.heading("action", text="Action")
-        self.tree_recent.heading("materiel", text="Matériel")
-        self.tree_recent.heading("personne", text="Personne")
-
-        self.tree_recent.column("date", width=150, minwidth=120)
-        self.tree_recent.column("action", width=120, minwidth=100)
-        self.tree_recent.column("materiel", width=200, minwidth=150)
-        self.tree_recent.column("personne", width=180, minwidth=120)
-
-        scrollbar = ttk.Scrollbar(
-            tree_container, orient="vertical",
-            command=self.tree_recent.yview,
-            style="Vigile.Vertical.TScrollbar"
-        )
-        self.tree_recent.configure(yscrollcommand=scrollbar.set)
-
-        self.tree_recent.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        # Charger les données
-        self.rafraichir()
-
-    def _creer_carte(self, parent, titre, valeur, couleur, index):
-        """Crée une carte de statistique."""
-        card = tk.Frame(
-            parent, bg=COLORS["bg_card"],
-            highlightbackground=couleur,
-            highlightthickness=2
-        )
-        card.grid(row=0, column=index, padx=8, pady=5, sticky="nsew")
-        parent.grid_columnconfigure(index, weight=1)
-
-        # Bande colorée en haut
-        top_bar = tk.Frame(card, bg=couleur, height=4)
-        top_bar.pack(fill="x")
-
-        # Contenu
-        content = tk.Frame(card, bg=COLORS["bg_card"])
-        content.pack(fill="both", expand=True, padx=18, pady=15)
-
-        label_titre = tk.Label(
-            content, text=titre, bg=COLORS["bg_card"],
-            fg=COLORS["text_secondary"], font=("Segoe UI", 11),
-            anchor="w"
-        )
-        label_titre.pack(fill="x")
-
-        label_valeur = tk.Label(
-            content, text=valeur, bg=COLORS["bg_card"],
-            fg=couleur, font=("Segoe UI", 32, "bold"),
-            anchor="w"
-        )
-        label_valeur.pack(fill="x", pady=(5, 0))
-
-        return label_valeur
-
-    def rafraichir(self):
-        """Rafraîchit les statistiques depuis la base de données."""
+    @staticmethod
+    def _load() -> dict:
         session = get_session()
         try:
-            # Compter le matériel
             total = session.query(Materiel).count()
-
-            # Compter les matériels avec une attribution active
-            attribue = (
-                session.query(Materiel)
-                .join(Attribution, Materiel.id == Attribution.materiel_id)
-                .filter(Attribution.is_active == True)
-                .count()
-            )
-
-            # En panne
-            en_panne = session.query(Materiel).filter_by(etat="en_panne").count()
-
-            # Disponible = total - attribué - en panne
-            disponible = total - attribue - en_panne
-
-            # Mettre à jour les labels
-            self.stat_labels["total"].config(text=str(total))
-            self.stat_labels["attribue"].config(text=str(attribue))
-            self.stat_labels["disponible"].config(text=str(max(0, disponible)))
-            self.stat_labels["en_panne"].config(text=str(en_panne))
-
-            # Charger les dernières attributions
-            self.tree_recent.delete(*self.tree_recent.get_children())
-
-            attributions = (
-                session.query(Attribution)
-                .order_by(Attribution.date_attribution.desc())
-                .limit(15)
-                .all()
-            )
-
-            for attr in attributions:
-                materiel = session.query(Materiel).get(attr.materiel_id)
-                code = materiel.code_vigile if materiel else "?"
-                action = "Attribution" if attr.is_active else "Retour"
-                date_str = attr.date_attribution.strftime("%d/%m/%Y %H:%M")
-                if not attr.is_active and attr.date_retour:
-                    date_str = attr.date_retour.strftime("%d/%m/%Y %H:%M")
-
-                self.tree_recent.insert("", "end", values=(
-                    date_str, action, code, attr.attribue_a
-                ))
-
-        except Exception as e:
-            print(f"[VIGILE] Erreur rafraîchissement dashboard : {e}")
+            attribue = session.query(Attribution).filter_by(is_active=True).count()
+            maintenance = session.query(Materiel).filter_by(etat="en_panne").count()
+            disponible = max(0, total - attribue - maintenance)
+            states = [
+                (state.replace("_", " ").capitalize(), session.query(Materiel).filter_by(etat=state).count(), STATE_COLORS[state])
+                for state in ETATS_MATERIEL
+            ]
+            activities = []
+            recent = session.query(Attribution).join(Materiel).order_by(Attribution.date_attribution.desc()).limit(10).all()
+            for attr in recent:
+                activities.append(
+                    {
+                        "materiel": attr.materiel.code_vigile if attr.materiel else "—",
+                        "person": attr.attribue_a,
+                        "date": attr.date_attribution.strftime("%d/%m/%Y %H:%M"),
+                    }
+                )
+            return {
+                "stats": {"total": total, "disponible": disponible, "attribue": attribue, "maintenance": maintenance},
+                "states": states,
+                "activities": activities,
+            }
         finally:
             session.close()
 
+    def refresh(self) -> None:
+        run_in_thread(self, self._load, self._bind)
 
-# =============================================================================
-# ServerFrame — Contrôle du serveur Flask
-# =============================================================================
+    def _bind(self, payload: dict) -> None:
+        for key, label in self.kpis.items():
+            label.animate_to(payload["stats"][key])
+        self.chart.set_data(payload["states"])
+        self.activity_table.setRowCount(0)
+        if not payload["activities"]:
+            self.activity_table.empty("Aucune attribution récente")
+            return
+        self.activity_table.setRowCount(len(payload["activities"]))
+        for row, activity in enumerate(payload["activities"]):
+            self.activity_table.setItem(row, 0, QTableWidgetItem(activity["materiel"]))
+            self.activity_table.setItem(row, 1, QTableWidgetItem(activity["person"]))
+            self.activity_table.setItem(row, 2, QTableWidgetItem(activity["date"]))
 
-class ServerFrame(tk.Frame):
-    """
-    Panneau de contrôle du serveur web Flask.
-    Permet de démarrer/arrêter le serveur et affiche l'URL d'accès.
-    """
 
-    def __init__(self, parent, flask_app=None):
-        super().__init__(parent, bg=COLORS["bg_dark"])
+class TunnelRunner(QThread):
+    log = pyqtSignal(str)
+    url_ready = pyqtSignal(str)
+    stopped = pyqtSignal()
+    failed = pyqtSignal(str)
+
+    def __init__(self, port: int):
+        super().__init__()
+        self.port = port
+        self.process: subprocess.Popen | None = None
+        self._running = True
+
+    def run(self) -> None:
+        if not telecharger_cloudflared(lambda message: self.log.emit(message)):
+            self.failed.emit("Impossible de préparer cloudflared.")
+            return
+        command = [_get_cloudflared_path(), "tunnel", "--url", f"http://localhost:{self.port}", "--no-autoupdate"]
+        try:
+            self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+            for line in self.process.stdout or []:
+                if not self._running:
+                    break
+                text = line.strip()
+                if text:
+                    self.log.emit(text)
+                if "trycloudflare.com" in text:
+                    for token in text.split():
+                        if token.startswith("https://") and "trycloudflare.com" in token:
+                            self.url_ready.emit(token)
+                            break
+        except Exception as exc:
+            self.failed.emit(str(exc))
+        finally:
+            if self.process and self.process.poll() is None:
+                self.process.terminate()
+            self.stopped.emit()
+
+    def stop(self) -> None:
+        self._running = False
+        if self.process and self.process.poll() is None:
+            self.process.terminate()
+
+
+class ServerFrame(QWidget):
+    def __init__(self, flask_app):
+        super().__init__()
         self.flask_app = flask_app
-        self.server_thread = None
-        self.server_running = False
-        self.tunnel = None  # Instance CloudflareTunnel
-        self.tunnel_running = False
-        self._construire_interface()
+        self.flask_thread: threading.Thread | None = None
+        self.tunnel_thread: TunnelRunner | None = None
+        self.local_url = self._local_url()
+        self.public_url = ""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
+        title = QLabel("Serveur & tunnel")
+        title.setObjectName("PageTitle")
+        layout.addWidget(title)
+        cards = QHBoxLayout()
+        cards.setSpacing(18)
+        self.local_card = StyledCard()
+        self.local_indicator = PulseIndicator(COLORS["secondary"])
+        local_row = QHBoxLayout()
+        local_row.addWidget(self.local_indicator)
+        local_row.addWidget(QLabel("Réseau local"))
+        local_row.addStretch(1)
+        self.local_card.layout().addLayout(local_row)
+        self.local_label = QLabel(self.local_url)
+        self.local_label.setStyleSheet(f"font-size: 18px; font-weight: 600; color: {COLORS['info']};")
+        self.local_status = QLabel("Prêt à démarrer")
+        self.local_status.setObjectName("MutedLabel")
+        self.local_card.layout().addWidget(self.local_label)
+        self.local_card.layout().addWidget(self.local_status)
+        cards.addWidget(self.local_card, 1)
+        self.tunnel_card = StyledCard()
+        self.tunnel_indicator = PulseIndicator(COLORS["primary"])
+        tunnel_row = QHBoxLayout()
+        tunnel_row.addWidget(self.tunnel_indicator)
+        tunnel_row.addWidget(QLabel("Tunnel Internet"))
+        tunnel_row.addStretch(1)
+        self.tunnel_card.layout().addLayout(tunnel_row)
+        self.tunnel_label = QLabel("https://—")
+        self.tunnel_label.setStyleSheet(f"font-size: 18px; font-weight: 600; color: {COLORS['primary']};")
+        self.tunnel_status = QLabel("Tunnel arrêté")
+        self.tunnel_status.setObjectName("MutedLabel")
+        self.tunnel_card.layout().addWidget(self.tunnel_label)
+        self.tunnel_card.layout().addWidget(self.tunnel_status)
+        cards.addWidget(self.tunnel_card, 1)
+        layout.addLayout(cards)
+        actions = QHBoxLayout()
+        self.start_server_button = VigileButton("Démarrer serveur", "primary")
+        self.start_server_button.clicked.connect(self.start_server)
+        self.start_tunnel_button = VigileButton("Démarrer tunnel", "secondary")
+        self.start_tunnel_button.clicked.connect(self.start_tunnel)
+        copy_local = VigileButton("Copier URL locale", "secondary")
+        copy_local.clicked.connect(lambda: QApplication.clipboard().setText(self.local_url))
+        copy_public = VigileButton("Copier URL publique", "secondary")
+        copy_public.clicked.connect(lambda: QApplication.clipboard().setText(self.public_url or self.local_url))
+        for widget in (self.start_server_button, self.start_tunnel_button, copy_local, copy_public):
+            actions.addWidget(widget)
+        layout.addLayout(actions)
+        lower = QHBoxLayout()
+        lower.setSpacing(18)
+        qr_card = StyledCard()
+        qr_card.layout().addWidget(QLabel("QR du serveur"))
+        self.qr_label = QLabel()
+        self.qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        qr_card.layout().addWidget(self.qr_label)
+        self._refresh_qr(self.local_url)
+        lower.addWidget(qr_card, 1)
+        log_card = StyledCard()
+        log_card.layout().addWidget(QLabel("Journal cloudflared"))
+        self.log_output = QPlainTextEdit()
+        self.log_output.setReadOnly(True)
+        self.log_output.setStyleSheet("QPlainTextEdit { font-family: 'DejaVu Sans Mono', monospace; font-size: 12px; }")
+        log_card.layout().addWidget(self.log_output)
+        lower.addWidget(log_card, 2)
+        layout.addLayout(lower)
 
-    def _get_ip_locale(self):
-        """Récupère l'adresse IP locale de la machine."""
+    def _local_url(self) -> str:
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.connect(("8.8.8.8", 80))
+            ip = sock.getsockname()[0]
+            sock.close()
         except Exception:
-            return "127.0.0.1"
+            ip = "127.0.0.1"
+        return f"http://{ip}:{FLASK_PORT}"
 
-    def _construire_interface(self):
-        tk.Label(
-            self, text="🌐 Serveur Web & Tunnel",
-            bg=COLORS["bg_dark"], fg=COLORS["text_primary"],
-            font=("Segoe UI", 22, "bold"), anchor="w"
-        ).pack(fill="x", padx=30, pady=(25, 20))
-
-        # ── Carte serveur local ──────────────────────────────────────────
-        card_local = tk.Frame(self, bg=COLORS["bg_card"])
-        card_local.pack(fill="x", padx=30, pady=(0, 10))
-        inner = tk.Frame(card_local, bg=COLORS["bg_card"])
-        inner.pack(fill="x", padx=25, pady=20)
-
-        tk.Label(inner, text="📡 Réseau local (WiFi)",
-                 bg=COLORS["bg_card"], fg=COLORS["text_secondary"],
-                 font=("Segoe UI", 11, "bold"), anchor="w").pack(fill="x")
-
-        self.status_label = tk.Label(
-            inner, text="● Serveur arrêté",
-            bg=COLORS["bg_card"], fg=COLORS["accent_red"],
-            font=("Segoe UI", 14, "bold"), anchor="w"
-        )
-        self.status_label.pack(fill="x", pady=(6, 2))
-
-        ip = self._get_ip_locale()
-        self.url_label_local = tk.Label(
-            inner, text=f"http://{ip}:{FLASK_PORT}",
-            bg=COLORS["bg_card"], fg=COLORS["text_secondary"],
-            font=("Consolas", 12), anchor="w"
-        )
-        self.url_label_local.pack(fill="x", pady=(0, 12))
-
-        btn_srv = tk.Frame(inner, bg=COLORS["bg_card"])
-        btn_srv.pack(fill="x")
-        self.btn_start = VigileButton(
-            btn_srv, text="▶ Démarrer", command=self._demarrer_serveur,
-            width=160, height=38, color=COLORS["accent_green"]
-        )
-        self.btn_start.pack(side="left", padx=(0, 8))
-        self.btn_stop = VigileButton(
-            btn_srv, text="⏹ Arrêter", command=self._arreter_serveur,
-            width=160, height=38, color=COLORS["accent_red"]
-        )
-        self.btn_stop.pack(side="left")
-
-        # ── Carte tunnel public ──────────────────────────────────────────
-        card_tunnel = tk.Frame(
-            self, bg=COLORS["bg_card"],
-            highlightbackground=COLORS["accent"],
-            highlightthickness=1
-        )
-        card_tunnel.pack(fill="x", padx=30, pady=(0, 10))
-        inner_t = tk.Frame(card_tunnel, bg=COLORS["bg_card"])
-        inner_t.pack(fill="x", padx=25, pady=20)
-
-        hdr = tk.Frame(inner_t, bg=COLORS["bg_card"])
-        hdr.pack(fill="x")
-        tk.Label(hdr, text="☁ Accès internet public (Cloudflare Tunnel)",
-                 bg=COLORS["bg_card"], fg=COLORS["accent"],
-                 font=("Segoe UI", 11, "bold"), anchor="w").pack(side="left")
-        tk.Label(hdr, text="✦ Gratuit, sans compte",
-                 bg=COLORS["bg_card"], fg=COLORS["accent_green"],
-                 font=("Segoe UI", 9), anchor="e").pack(side="right")
-
-        self.tunnel_status_label = tk.Label(
-            inner_t, text="● Tunnel inactif",
-            bg=COLORS["bg_card"], fg=COLORS["text_muted"],
-            font=("Segoe UI", 13, "bold"), anchor="w"
-        )
-        self.tunnel_status_label.pack(fill="x", pady=(8, 2))
-
-        self.tunnel_url_label = tk.Label(
-            inner_t,
-            text="Démarrez le serveur puis activez le tunnel",
-            bg=COLORS["bg_card"], fg=COLORS["text_muted"],
-            font=("Consolas", 11), anchor="w", cursor="hand2"
-        )
-        self.tunnel_url_label.pack(fill="x", pady=(0, 4))
-        self.tunnel_url_label.bind("<Button-1>", self._copier_url_tunnel)
-
-        tk.Label(
-            inner_t,
-            text="Cliquez sur l'URL pour la copier  ·  QR scannable depuis n'importe quel réseau",
-            bg=COLORS["bg_card"], fg=COLORS["text_muted"],
-            font=("Segoe UI", 9), anchor="w"
-        ).pack(fill="x", pady=(0, 10))
-
-        btn_t = tk.Frame(inner_t, bg=COLORS["bg_card"])
-        btn_t.pack(fill="x")
-        self.btn_tunnel_start = VigileButton(
-            btn_t, text="☁ Activer le tunnel", command=self._demarrer_tunnel,
-            width=190, height=38, color=COLORS["accent"]
-        )
-        self.btn_tunnel_start.pack(side="left", padx=(0, 8))
-        self.btn_tunnel_stop = VigileButton(
-            btn_t, text="✕ Désactiver", command=self._arreter_tunnel,
-            width=150, height=38, color=COLORS["bg_card"]
-        )
-        self.btn_tunnel_stop.pack(side="left")
-        self.btn_dl = VigileButton(
-            btn_t, text="⬇ Installer cloudflared", command=self._telecharger_cloudflared,
-            width=200, height=38, color=COLORS["accent_orange"]
-        )
-
-        # Vérifier si cloudflared est déjà présent
-        from tunnel import _get_cloudflared_path
-        if not os.path.exists(_get_cloudflared_path()):
-            self.btn_dl.pack(side="left", padx=(8, 0))
-
-        # ── Zone QR ──────────────────────────────────────────────────────
-        qr_frame = tk.Frame(self, bg=COLORS["bg_card"])
-        qr_frame.pack(fill="x", padx=30, pady=(0, 15))
-        tk.Label(
-            qr_frame, text="📱 QR Code d'accès",
-            bg=COLORS["bg_card"], fg=COLORS["text_primary"],
-            font=("Segoe UI", 13, "bold")
-        ).pack(pady=(15, 8))
-        self.qr_label = tk.Label(
-            qr_frame,
-            text="Démarrez le serveur pour générer le QR code",
-            bg=COLORS["bg_card"], fg=COLORS["text_muted"],
-            font=("Segoe UI", 10)
-        )
-        self.qr_label.pack(pady=(0, 15))
-
-    def _demarrer_serveur(self):
-        """Démarre le serveur Flask dans un thread séparé."""
-        if self.server_running:
-            messagebox.showinfo("Serveur", "Le serveur est déjà en cours d'exécution.")
-            return
-
-        if not self.flask_app:
-            messagebox.showerror(
-                "Erreur",
-                "L'application Flask n'est pas configurée.\n"
-                "Lancez l'application via app.py."
-            )
-            return
-
+    def _refresh_qr(self, url: str) -> None:
+        # Le QR du serveur permet une bascule immédiate du desktop vers le mobile terrain.
         try:
-            ip = self._get_ip_locale()
+            host = url.split("//", 1)[-1].split(":", 1)[0]
+            path = generer_qr_code("VIG-SERVER", host=host, port=FLASK_PORT)
+            pixmap = QPixmap(path).scaled(220, 220, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.qr_label.setPixmap(pixmap)
+        except Exception:
+            self.qr_label.setText("QR indisponible")
 
-            def run_server():
-                self.flask_app.run(
-                    host="0.0.0.0", port=FLASK_PORT,
-                    debug=False, use_reloader=False
-                )
+    def append_log(self, message: str) -> None:
+        self.log_output.appendPlainText(message)
 
-            self.server_thread = threading.Thread(
-                target=run_server, daemon=True
-            )
-            self.server_thread.start()
-            self.server_running = True
-
-            # Mettre à jour l'interface
-            self.status_label.config(
-                text="● Serveur en cours d'exécution",
-                fg=COLORS["accent_green"]
-            )
-            # URL locale toujours affichée
-            ip = self._get_ip_locale()
-            self._generer_qr_serveur_url(f"http://{ip}:{FLASK_PORT}")
-
-            print(f"[VIGILE] Serveur Flask démarré sur http://{ip}:{FLASK_PORT}")
-
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible de démarrer le serveur :\n{e}")
-
-    def _arreter_serveur(self):
-        """Arrête le serveur Flask."""
-        if not self.server_running:
-            messagebox.showinfo("Serveur", "Le serveur n'est pas en cours d'exécution.")
+    def start_server(self) -> None:
+        if self.flask_thread and self.flask_thread.is_alive():
+            self.append_log("Serveur Flask déjà actif.")
             return
 
-        # Note : Flask dans un thread daemon s'arrête quand l'app principale s'arrête
-        # Pour un arrêt propre, on utilise werkzeug.server.shutdown
-        self.server_running = False
-        self.status_label.config(
-            text="● Serveur arrêté", fg=COLORS["accent_red"]
-        )
-        self.url_label_local.config(fg=COLORS["text_secondary"])
-        self.qr_label.config(
-            text="Démarrez le serveur pour générer le QR code",
-            image="", compound="none"
-        )
-        print("[VIGILE] Serveur Flask arrêté.")
+        def run_server():
+            self.flask_app.run(host="0.0.0.0", port=FLASK_PORT, debug=False, use_reloader=False)
 
-    def _demarrer_tunnel(self):
-        """Lance le Cloudflare Tunnel."""
-        if not self.server_running:
-            messagebox.showwarning(
-                "Tunnel", "Démarrez d'abord le serveur local avant d'activer le tunnel."
-            )
+        self.flask_thread = threading.Thread(target=run_server, daemon=True, name="vigile-flask")
+        self.flask_thread.start()
+        self.local_indicator.start()
+        self.local_status.setText("Serveur actif")
+        self.append_log(f"Serveur démarré sur {self.local_url}")
+
+    def start_tunnel(self) -> None:
+        if self.tunnel_thread and self.tunnel_thread.isRunning():
+            self.append_log("Tunnel déjà actif.")
             return
+        self.tunnel_thread = TunnelRunner(FLASK_PORT)
+        self.tunnel_thread.log.connect(self.append_log)
+        self.tunnel_thread.url_ready.connect(self._on_tunnel_url)
+        self.tunnel_thread.failed.connect(lambda message: self.append_log(f"Erreur: {message}"))
+        self.tunnel_thread.stopped.connect(lambda: self.tunnel_status.setText("Tunnel arrêté"))
+        self.tunnel_thread.start()
+        self.tunnel_indicator.start()
+        self.tunnel_status.setText("Initialisation du tunnel…")
 
-        from tunnel import CloudflareTunnel, telecharger_cloudflared, _get_cloudflared_path
-        if not os.path.exists(_get_cloudflared_path()):
-            messagebox.showinfo(
-                "cloudflared manquant",
-                "cloudflared n'est pas installé.\nCliquez sur 'Installer cloudflared' d'abord."
-            )
+    def _on_tunnel_url(self, url: str) -> None:
+        self.public_url = url
+        self.tunnel_label.setText(url)
+        self.tunnel_status.setText("Tunnel opérationnel")
+        self._refresh_qr(url)
+
+
+class Sidebar(QFrame):
+    page_requested = pyqtSignal(str)
+    logout_requested = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("Sidebar")
+        self.setFixedWidth(240)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 18, 16, 18)
+        layout.setSpacing(14)
+        self.logo = QLabel("🛡")
+        self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.logo.setStyleSheet(f"font-size: 34px; color: {COLORS['primary']};")
+        layout.addWidget(self.logo)
+        brand = QLabel(APP_NAME)
+        brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        brand.setStyleSheet("font-size: 18px; font-weight: 600;")
+        layout.addWidget(brand)
+        animation = QVariantAnimation(self, duration=900)
+        animation.setStartValue(70)
+        animation.setEndValue(255)
+        animation.setLoopCount(-1)
+        animation.valueChanged.connect(
+            lambda value: self.logo.setStyleSheet(f"font-size: 34px; color: rgba(124,107,255,{int(value)});")
+        )
+        animation.start()
+        self._logo_animation = animation
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.HLine)
+        divider.setStyleSheet(f"background: {COLORS['border']}; max-height: 1px;")
+        layout.addWidget(divider)
+        self.group = QButtonGroup(self)
+        self.group.setExclusive(True)
+        self.buttons: dict[str, SidebarButton] = {}
+        for key, label, icon in (
+            ("dashboard", "Dashboard", "◫"),
+            ("inventory", "Inventaire", "▤"),
+            ("add", "Nouveau matériel", "＋"),
+            ("history", "Historique", "⟲"),
+            ("users", "Utilisateurs", "◎"),
+            ("server", "Serveur", "☁"),
+        ):
+            button = SidebarButton(key, label, icon)
+            button.clicked_with_key.connect(self.page_requested.emit)
+            self.group.addButton(button)
+            layout.addWidget(button)
+            self.buttons[key] = button
+        layout.addStretch(1)
+        self.user_card = StyledCard(padding=14)
+        top = QHBoxLayout()
+        self.avatar = QLabel("VG")
+        self.avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.avatar.setFixedSize(44, 44)
+        self.avatar.setStyleSheet(
+            f"background: {alpha(COLORS['primary'], 50)}; color: {COLORS['text']}; border-radius: 22px; font-weight: 600;"
+        )
+        top.addWidget(self.avatar)
+        identity = QVBoxLayout()
+        self.username = QLabel("Utilisateur")
+        self.role = QLabel("—")
+        self.role.setObjectName("MutedLabel")
+        identity.addWidget(self.username)
+        identity.addWidget(self.role)
+        top.addLayout(identity)
+        self.user_card.layout().addLayout(top)
+        logout = VigileButton("Déconnexion", "secondary")
+        logout.clicked.connect(self.logout_requested.emit)
+        self.user_card.layout().addWidget(logout)
+        layout.addWidget(self.user_card)
+
+    def set_user(self, user: dict) -> None:
+        initials = "".join(part[0].upper() for part in user["username"].split()[:2]) or user["username"][:2].upper()
+        self.avatar.setText(initials)
+        self.username.setText(user["username"])
+        self.role.setText(user["role"].capitalize())
+
+    def set_admin_visibility(self, visible: bool) -> None:
+        self.buttons["users"].setVisible(visible)
+
+    def set_active(self, key: str) -> None:
+        if key in self.buttons:
+            self.buttons[key].setChecked(True)
+
+
+class VigileWindow(QMainWindow):
+    def __init__(self, flask_app, tk_root=None):
+        super().__init__()
+        self.flask_app = flask_app
+        self.tk_root = tk_root
+        self.current_user: dict | None = None
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            width = min(1420, max(960, available.width() - 48))
+            height = min(920, max(680, available.height() - 48))
+            self.resize(width, height)
+        else:
+            self.resize(1280, 820)
+        outer = QWidget()
+        outer.setObjectName("WindowRoot")
+        self.setCentralWidget(outer)
+        outer_layout = QVBoxLayout(outer)
+        outer_layout.setContentsMargins(18, 18, 18, 18)
+        self.shell = QFrame()
+        self.shell.setObjectName("AppShell")
+        apply_shadow(self.shell, blur=42, y_offset=18, alpha_value=120)
+        shell_layout = QVBoxLayout(self.shell)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(0)
+        self.title_bar = TitleBar(self)
+        shell_layout.addWidget(self.title_bar)
+        self.body = QHBoxLayout()
+        self.body.setContentsMargins(18, 18, 18, 18)
+        self.body.setSpacing(18)
+        shell_layout.addLayout(self.body)
+        outer_layout.addWidget(self.shell)
+        self._show_login()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(self.rect().adjusted(8, 8, -8, -8)), 18, 18)
+        painter.fillPath(path, QColor(0, 0, 0, 1))
+
+    def toggle_maximize(self) -> None:
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
+
+    def _show_login(self) -> None:
+        clear_layout(self.body)
+        self.login = LoginFrame()
+        self.login.login_success.connect(self._on_login_success)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(self.login)
+        self.body.addWidget(scroll)
+
+    def _on_login_success(self, user_data: dict) -> None:
+        self.current_user = user_data
+        self._build_shell()
+
+    def _build_shell(self) -> None:
+        clear_layout(self.body)
+        self.sidebar = Sidebar()
+        self.sidebar.set_user(self.current_user)
+        self.sidebar.set_admin_visibility(self.current_user["role"] == "admin")
+        self.sidebar.page_requested.connect(self.show_page)
+        self.sidebar.logout_requested.connect(self.logout)
+        self.body.addWidget(self.sidebar)
+        right = QWidget()
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        self.stack = QStackedWidget()
+        right_layout.addWidget(self.stack)
+        self.body.addWidget(right, 1)
+        self.page_factories = {
+            "dashboard": lambda: DashboardFrame(),
+            "inventory": lambda: __import__("desktop.inventory_view", fromlist=["InventoryFrame"]).InventoryFrame(self.current_user),
+            "add": lambda: __import__("desktop.add_material", fromlist=["AddMaterialFrame"]).AddMaterialFrame(self.current_user),
+            "history": lambda: __import__("desktop.history_view", fromlist=["HistoryFrame"]).HistoryFrame(),
+            "users": lambda: __import__("desktop.user_manager", fromlist=["UserManagerFrame"]).UserManagerFrame(),
+            "server": lambda: ServerFrame(self.flask_app),
+        }
+        self.page_order = list(self.page_factories.keys())
+        self.pages: dict[str, QWidget] = {}
+        self.page_containers: dict[str, QScrollArea] = {}
+        for _ in self.page_order:
+            placeholder = QScrollArea()
+            placeholder.setWidgetResizable(True)
+            placeholder.setFrameShape(QFrame.Shape.NoFrame)
+            placeholder.setWidget(QWidget())
+            self.stack.addWidget(placeholder)
+        self._ensure_page("dashboard")
+        self.show_page("dashboard")
+
+    def _ensure_page(self, key: str) -> None:
+        if key in self.pages:
             return
+        page = self.page_factories[key]()
+        if key == "dashboard":
+            page.navigate.connect(self.show_page)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        surface = QWidget()
+        surface_layout = QVBoxLayout(surface)
+        surface_layout.setContentsMargins(18, 18, 18, 18)
+        surface_layout.addWidget(page)
+        surface_layout.addStretch(1)
+        scroll.setWidget(surface)
+        index = self.page_order.index(key)
+        old = self.stack.widget(index)
+        self.stack.removeWidget(old)
+        old.deleteLater()
+        self.stack.insertWidget(index, scroll)
+        self.pages[key] = page
+        self.page_containers[key] = scroll
 
-        self.tunnel_status_label.config(
-            text="⏳ Connexion au réseau Cloudflare...",
-            fg=COLORS["accent_orange"]
-        )
-        self.tunnel_url_label.config(text="Génération de l'URL en cours...")
+    def show_page(self, key: str) -> None:
+        if key not in self.page_factories:
+            return
+        self._ensure_page(key)
+        self.stack.setCurrentIndex(self.page_order.index(key))
+        self.sidebar.set_active(key)
+        page = self.pages[key]
+        if hasattr(page, "refresh"):
+            page.refresh()
 
-        self.tunnel = CloudflareTunnel(port=FLASK_PORT)
+    def logout(self) -> None:
+        self.current_user = None
+        self._show_login()
 
-        def on_url(url):
-            # Appelé depuis le thread tunnel — utiliser after() pour Tkinter
-            self.after(0, lambda: self._on_tunnel_url(url))
+    def closeEvent(self, event) -> None:
+        for thread in list(getattr(self, "_worker_threads", set())):
+            thread.quit()
+            thread.wait(1500)
+        if hasattr(self, "pages"):
+            for page in self.pages.values():
+                for thread in list(getattr(page, "_worker_threads", set())):
+                    thread.quit()
+                    thread.wait(1500)
+        if self.tk_root is not None:
+            self.tk_root.after(0, self.tk_root.destroy)
+        super().closeEvent(event)
 
-        def on_erreur(msg):
-            self.after(0, lambda: self._on_tunnel_erreur(msg))
-
-        self.tunnel.demarrer(callback_url=on_url, callback_erreur=on_erreur)
-        self.tunnel_running = True
-
-    def _on_tunnel_url(self, url: str):
-        """Appelé quand l'URL du tunnel est disponible."""
-        self.tunnel_status_label.config(
-            text="● Tunnel actif — Accès mondial HTTPS",
-            fg=COLORS["accent_green"]
-        )
-        self.tunnel_url_label.config(
-            text=url, fg=COLORS["accent_green"]
-        )
-        # Générer le QR avec l'URL publique (remplace le QR local)
-        self._generer_qr_serveur_url(url)
-        print(f"[VIGILE] Tunnel actif : {url}")
-
-    def _on_tunnel_erreur(self, msg: str):
-        """Appelé en cas d'erreur du tunnel."""
-        self.tunnel_status_label.config(
-            text=f"● Erreur tunnel", fg=COLORS["accent_red"]
-        )
-        self.tunnel_url_label.config(
-            text=msg, fg=COLORS["accent_red"]
-        )
-        self.tunnel_running = False
-
-    def _arreter_tunnel(self):
-        """Arrête le Cloudflare Tunnel."""
-        if self.tunnel:
-            self.tunnel.arreter()
-            self.tunnel = None
-        self.tunnel_running = False
-        self.tunnel_status_label.config(
-            text="● Tunnel inactif", fg=COLORS["text_muted"]
-        )
-        self.tunnel_url_label.config(
-            text="Tunnel arrêté", fg=COLORS["text_muted"]
-        )
-
-    def _copier_url_tunnel(self, event=None):
-        """Copie l'URL du tunnel dans le presse-papiers."""
-        if self.tunnel and self.tunnel.url:
-            self.clipboard_clear()
-            self.clipboard_append(self.tunnel.url)
-            self.tunnel_url_label.config(text=f"✓ Copié ! {self.tunnel.url}")
-            self.after(2000, lambda: self.tunnel_url_label.config(text=self.tunnel.url))
-
-    def _telecharger_cloudflared(self):
-        """Lance le téléchargement de cloudflared avec feedback visuel."""
-        from tunnel import telecharger_cloudflared
-        self.btn_dl._active_color = COLORS["text_muted"]
-        self.btn_dl._draw()
-
-        def _dl():
-            def progression(msg):
-                self.after(0, lambda m=msg: self.tunnel_status_label.config(
-                    text=m, fg=COLORS["accent_orange"]
-                ))
-            ok = telecharger_cloudflared(callback_progression=progression)
-            if ok:
-                self.after(0, lambda: [
-                    self.tunnel_status_label.config(
-                        text="✓ cloudflared installé — Prêt à activer",
-                        fg=COLORS["accent_green"]
-                    ),
-                    self.btn_dl.pack_forget()
-                ])
-            else:
-                self.after(0, lambda: self.tunnel_status_label.config(
-                    text="Échec du téléchargement — Vérifiez internet",
-                    fg=COLORS["accent_red"]
-                ))
-
-        threading.Thread(target=_dl, daemon=True).start()
-
-    def _generer_qr_serveur_url(self, url: str):
-        """Génère un QR code pour une URL donnée (locale ou tunnel)."""
-        try:
-            from PIL import Image, ImageTk
-            import qrcode as qr_lib
-            qr = qr_lib.QRCode(box_size=5, border=2)
-            qr.add_data(url)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="#6c63ff", back_color="#1c1c2e")
-            img = img.convert("RGB")
-            img = img.resize((180, 180), Image.NEAREST)
-            self._qr_photo = ImageTk.PhotoImage(img)
-            self.qr_label.config(
-                image=self._qr_photo,
-                text=f"\n{url}",
-                compound="top",
-                fg=COLORS["accent_green"] if "trycloudflare" in url else COLORS["text_secondary"]
-            )
-        except Exception as e:
-            self.qr_label.config(text=f"QR : {url}\n({e})")
-
-    def _generer_qr_serveur(self, ip):
-        """Obsolète : remplacé par _generer_qr_serveur_url."""
-        self._generer_qr_serveur_url(f"http://{ip}:{FLASK_PORT}")
-
-    def set_flask_app(self, app):
-        """Définit l'application Flask à utiliser."""
-        self.flask_app = app
-
-
-# =============================================================================
-# MainWindow — Fenêtre principale avec navigation
-# =============================================================================
 
 class MainWindow:
-    """
-    Fenêtre principale de VIGILE avec navigation latérale.
-    Gère le basculement entre les différentes vues (frames).
-    """
+    """Pont Tkinter -> PyQt6 pour garder app.py inchangé."""
 
-    def __init__(self, root, flask_app=None):
-        """
-        Args:
-            root: Fenêtre Tk racine
-            flask_app: Instance de l'application Flask (optionnel)
-        """
+    def __init__(self, root, flask_app):
         self.root = root
-        self.flask_app = flask_app
-        self.current_user = None
-        self.frames = {}
-        self.active_nav_button = None
+        self.root.withdraw()
+        self.qt_app = QApplication.instance() or QApplication(sys.argv)
+        load_theme(self.qt_app)
+        self.window = VigileWindow(flask_app=flask_app, tk_root=root)
+        self.window.show()
+        self._alive = True
+        self._pump()
 
-        # Configuration de la fenêtre
-        self.root.title(f"{APP_NAME} — {APP_SLOGAN}")
-        self.root.geometry("1200x750")
-        self.root.minsize(1000, 650)
-        self.root.configure(bg=COLORS["bg_dark"])
+    def _pump(self) -> None:
+        # app.py reste maître du cycle de vie, donc on pompe explicitement l'event loop Qt.
+        if not self._alive:
+            return
+        self.qt_app.processEvents()
+        self.root.after(16, self._pump)
 
-        # Configurer le style ttk
-        configurer_style(self.root)
-
-        # Afficher l'écran de lancement (splash screen) au lieu du login direct
-        self._afficher_splash()
-
-    def _fade_in_text(self, label, target_color, text=None, steps=20, duration=600):
-        """Anime l'apparition d'un texte par interpolation de couleur."""
-        if text:
-            label.config(text=text)
-
-        def hex_to_rgb(hex_c):
-            return tuple(int(hex_c.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-        
-        bg_rgb = hex_to_rgb(COLORS["bg_dark"])
-        target_rgb = hex_to_rgb(target_color)
-
-        def anim_step(current_step):
-            p = current_step / steps
-            r = int(bg_rgb[0] + (target_rgb[0] - bg_rgb[0]) * p)
-            g = int(bg_rgb[1] + (target_rgb[1] - bg_rgb[1]) * p)
-            b = int(bg_rgb[2] + (target_rgb[2] - bg_rgb[2]) * p)
-            
-            label.config(fg=f"#{r:02x}{g:02x}{b:02x}")
-            
-            if current_step < steps:
-                self.root.after(duration // steps, lambda: anim_step(current_step + 1))
-
-        anim_step(0)
-
-    def _afficher_splash(self):
-        """Affiche une animation de lancement de VIGILE."""
-        self.splash_frame = tk.Frame(self.root, bg=COLORS["bg_dark"])
-        self.splash_frame.pack(fill="both", expand=True)
-
-        container = tk.Frame(self.splash_frame, bg=COLORS["bg_dark"])
-        container.place(relx=0.5, rely=0.5, anchor="center")
-
-        # 1. Logo
-        self.logo_lbl = tk.Label(
-            container, text="🛡", bg=COLORS["bg_dark"], fg=COLORS["bg_dark"],
-            font=("Segoe UI", 90)
-        )
-        self.logo_lbl.pack()
-
-        # 2. Nom du projet
-        self.name_lbl = tk.Label(
-            container, text="", bg=COLORS["bg_dark"], fg=COLORS["bg_dark"],
-            font=("Segoe UI", 44, "bold")
-        )
-        self.name_lbl.pack(pady=(15, 0))
-
-        # 3. Auteur de manière discrète en bas
-        self.author_lbl = tk.Label(
-            self.splash_frame, text="", bg=COLORS["bg_dark"], 
-            fg=COLORS["bg_dark"], font=("Segoe UI", 11)
-        )
-        self.author_lbl.pack(side="bottom", pady=40)
-
-        # Séquençage des animations
-        self.root.after(400, lambda: self._fade_in_text(self.logo_lbl, COLORS["accent_blue"], duration=800))
-        self.root.after(1400, lambda: self._fade_in_text(self.name_lbl, COLORS["text_primary"], text="V I G I L E", duration=800))
-        self.root.after(2600, lambda: self._fade_in_text(self.author_lbl, COLORS["text_muted"], text="© 2026 — Créé par Francis NDAYUBAHA", duration=1000))
-
-        # Transition vers l'écran de login
-        self.root.after(4800, self._fin_splash)
-
-    def _fin_splash(self):
-        """Détruit le splash screen et lance l'interface de connexion."""
-        self.splash_frame.destroy()
-        self._afficher_login()
-
-    def _afficher_splash_fermeture(self):
-        """Affiche une animation de lancement de VIGILE."""
-        for widget in self.root.winfo_children():
-            widget.destroy()
-
-        self.root.configure(bg=COLORS["bg_dark"])
-        container = tk.Frame(self.root, bg=COLORS["bg_dark"])
-        container.place(relx=0.5, rely=0.5, anchor="center")
-
-        logo_lbl = tk.Label(
-            container, text="🛡", bg=COLORS["bg_dark"], fg=COLORS["accent_blue"],
-            font=("Segoe UI", 90)
-        )
-        logo_lbl.pack()
-
-        name_lbl = tk.Label(
-            container, text="V I G I L E", bg=COLORS["bg_dark"], fg=COLORS["text_primary"],
-            font=("Segoe UI", 44, "bold")
-        )
-        name_lbl.pack(pady=(15, 0))
-
-        author_lbl = tk.Label(
-            self.root, text="© 2026 — Créé par Francis NDAYUBAHA", bg=COLORS["bg_dark"], 
-            fg=COLORS["text_muted"], font=("Segoe UI", 11)
-        )
-        author_lbl.pack(side="bottom", pady=40)
-
-        # Reverse fade out animation
-        self.root.after(400, lambda: self._fade_in_text(author_lbl, COLORS["bg_dark"], duration=800))
-        self.root.after(1400, lambda: self._fade_in_text(name_lbl, COLORS["bg_dark"], duration=800))
-        self.root.after(2600, lambda: self._fade_in_text(logo_lbl, COLORS["bg_dark"], duration=1000))
-
-        # Close app
-        self.root.after(4000, self.root.destroy)
-
-    def _afficher_login(self):
-        """Affiche l'écran de connexion."""
-        self.login_frame = LoginFrame(self.root, on_login_success=self._on_login)
-        self.login_frame.pack(fill="both", expand=True)
-
-    def _on_login(self, user_info):
-        """Callback après connexion réussie."""
-        self.current_user = user_info
-        self.login_frame.destroy()
-        self._construire_interface_principale()
-
-    def _construire_interface_principale(self):
-        """Construit l'interface principale après connexion."""
-        # Container principal
-        main_container = tk.Frame(self.root, bg=COLORS["bg_dark"])
-        main_container.pack(fill="both", expand=True)
-
-        # =====================================================================
-        # Barre latérale (sidebar)
-        # =====================================================================
-        sidebar = tk.Frame(
-            main_container, bg=COLORS["bg_sidebar"], width=220
-        )
-        sidebar.pack(side="left", fill="y")
-        sidebar.pack_propagate(False)
-
-        # Logo dans la sidebar
-        logo_frame = tk.Frame(sidebar, bg=COLORS["bg_sidebar"])
-        logo_frame.pack(fill="x", pady=(20, 5))
-
-        tk.Label(
-            logo_frame, text="🛡", bg=COLORS["bg_sidebar"],
-            font=("Segoe UI", 28)
-        ).pack()
-
-        tk.Label(
-            logo_frame, text=APP_NAME, bg=COLORS["bg_sidebar"],
-            fg=COLORS["accent"], font=("Segoe UI", 18, "bold")
-        ).pack()
-
-        tk.Label(
-            logo_frame, text=APP_SLOGAN, bg=COLORS["bg_sidebar"],
-            fg=COLORS["text_muted"], font=("Segoe UI", 8, "italic"),
-            wraplength=180
-        ).pack(pady=(2, 0))
-
-        # Séparateur
-        tk.Frame(
-            sidebar, bg=COLORS["border"], height=1
-        ).pack(fill="x", padx=15, pady=15)
-
-        # Boutons de navigation
-        self.nav_buttons = {}
-        nav_items = [
-            ("dashboard", "📊  Tableau de bord"),
-            ("inventaire", "📋  Inventaire"),
-            ("ajouter", "➕  Ajouter matériel"),
-            ("historique", "📜  Historique"),
-        ]
-
-        # Ajouter la gestion users seulement pour les admins
-        if self.current_user["role"] == "admin":
-            nav_items.append(("users", "👥  Utilisateurs"))
-
-        nav_items.append(("serveur", "🌐  Serveur Web"))
-
-        for key, label in nav_items:
-            btn = self._creer_nav_button(sidebar, key, label)
-            self.nav_buttons[key] = btn
-
-        # Info utilisateur en bas de la sidebar
-        user_frame = tk.Frame(sidebar, bg=COLORS["bg_sidebar"])
-        user_frame.pack(side="bottom", fill="x", padx=15, pady=15)
-
-        tk.Frame(sidebar, bg=COLORS["border"], height=1).pack(
-            side="bottom", fill="x", padx=15
-        )
-
-        tk.Label(
-            user_frame,
-            text=f"👤 {self.current_user['username']}",
-            bg=COLORS["bg_sidebar"], fg=COLORS["text_primary"],
-            font=("Segoe UI", 11), anchor="w"
-        ).pack(fill="x")
-
-        tk.Label(
-            user_frame,
-            text=f"Rôle : {self.current_user['role']}",
-            bg=COLORS["bg_sidebar"], fg=COLORS["text_muted"],
-            font=("Segoe UI", 9), anchor="w"
-        ).pack(fill="x")
-
-        # Bouton déconnexion
-        logout_btn = tk.Label(
-            user_frame, text="🚪 Déconnexion",
-            bg=COLORS["bg_sidebar"], fg=COLORS["accent_red"],
-            font=("Segoe UI", 10), cursor="hand2", anchor="w"
-        )
-        logout_btn.pack(fill="x", pady=(8, 0))
-        logout_btn.bind("<Button-1>", lambda e: self._deconnexion())
-
-        # =====================================================================
-        # Zone de contenu (droite)
-        # =====================================================================
-        self.content_area = tk.Frame(main_container, bg=COLORS["bg_dark"])
-        self.content_area.pack(side="left", fill="both", expand=True)
-
-        # =====================================================================
-        # Créer les frames de contenu
-        # =====================================================================
-        self._creer_frames()
-
-        # Afficher le dashboard par défaut
-        self._naviguer("dashboard")
-
-    def _creer_nav_button(self, parent, key, text):
-        """Crée un bouton de navigation dans la sidebar."""
-        btn = tk.Label(
-            parent, text=text,
-            bg=COLORS["bg_sidebar"], fg=COLORS["text_secondary"],
-            font=("Segoe UI", 11), anchor="w", padx=20, pady=10,
-            cursor="hand2"
-        )
-        btn.pack(fill="x")
-
-        btn.bind("<Enter>", lambda e, b=btn, k=key:
-                 b.config(bg=COLORS["bg_hover"]) if self.active_nav_button != k else None)
-        btn.bind("<Leave>", lambda e, b=btn, k=key:
-                 b.config(bg=COLORS["bg_sidebar"]) if self.active_nav_button != k else None)
-        btn.bind("<Button-1>", lambda e, k=key: self._naviguer(k))
-
-        return btn
-
-    def _creer_frames(self):
-        """Crée toutes les frames de contenu."""
-        # Dashboard
-        self.frames["dashboard"] = DashboardFrame(self.content_area)
-
-        # Les autres frames seront importées depuis leurs modules respectifs
-        # Pour l'instant, on crée des placeholders qui seront remplacés
-        try:
-            from desktop.add_material import AddMaterialFrame
-            self.frames["ajouter"] = AddMaterialFrame(
-                self.content_area, self.current_user
-            )
-        except ImportError:
-            self.frames["ajouter"] = self._placeholder_frame("Ajouter matériel")
-
-        try:
-            from desktop.inventory_view import InventoryFrame
-            self.frames["inventaire"] = InventoryFrame(
-                self.content_area, self.current_user
-            )
-        except ImportError:
-            self.frames["inventaire"] = self._placeholder_frame("Inventaire")
-
-        try:
-            from desktop.history_view import HistoryFrame
-            self.frames["historique"] = HistoryFrame(self.content_area)
-        except ImportError:
-            self.frames["historique"] = self._placeholder_frame("Historique")
-
-        if self.current_user["role"] == "admin":
-            try:
-                from desktop.user_manager import UserManagerFrame
-                self.frames["users"] = UserManagerFrame(self.content_area)
-            except ImportError:
-                self.frames["users"] = self._placeholder_frame("Gestion utilisateurs")
-
-        # Serveur Web
-        server_frame = ServerFrame(self.content_area, self.flask_app)
-        self.frames["serveur"] = server_frame
-
-    def _placeholder_frame(self, titre):
-        """Crée un frame placeholder pour les modules pas encore implémentés."""
-        frame = tk.Frame(self.content_area, bg=COLORS["bg_dark"])
-        tk.Label(
-            frame, text=f"🚧 {titre}",
-            bg=COLORS["bg_dark"], fg=COLORS["text_muted"],
-            font=("Segoe UI", 20)
-        ).pack(expand=True)
-        return frame
-
-    def _naviguer(self, destination):
-        """Bascule vers une frame de contenu."""
-        # Cacher toutes les frames
-        for frame in self.frames.values():
-            frame.pack_forget()
-
-        # Afficher la frame demandée
-        if destination in self.frames:
-            self.frames[destination].pack(fill="both", expand=True)
-
-            # Rafraîchir les données si la frame a une méthode rafraichir
-            if hasattr(self.frames[destination], "rafraichir"):
-                self.frames[destination].rafraichir()
-
-        # Mettre à jour l'apparence des boutons de navigation
-        for key, btn in self.nav_buttons.items():
-            if key == destination:
-                btn.config(
-                    bg=COLORS["accent"], fg="#ffffff",
-                    font=("Segoe UI", 11, "bold")
-                )
-            else:
-                btn.config(
-                    bg=COLORS["bg_sidebar"], fg=COLORS["text_secondary"],
-                    font=("Segoe UI", 11)
-                )
-        self.active_nav_button = destination
-
-    def _deconnexion(self):
-        """Déconnecte l'utilisateur et revient à l'écran de connexion."""
-        if messagebox.askyesno("Déconnexion", "Voulez-vous vous déconnecter ?"):
-            self.current_user = None
-            # Détruire tous les widgets
-            for widget in self.root.winfo_children():
-                widget.destroy()
-            # Réafficher le login
-            self._afficher_login()
-
-    def get_server_frame(self):
-        """Retourne le ServerFrame pour configuration externe."""
-        return self.frames.get("serveur")
-
-
-# =============================================================================
-# Point d'entrée pour test direct
-# =============================================================================
-
-if __name__ == "__main__":
-    # Initialiser la BD
-    init_db()
-
-    # Créer la fenêtre
-    root = tk.Tk()
-    app = MainWindow(root)
-    root.mainloop()
+    def _afficher_splash_fermeture(self) -> None:
+        self._alive = False
+        self.window.close()
+        self.qt_app.quit()
