@@ -5,7 +5,7 @@ AppPublisher=Francis NDAYUBAHA
 AppPublisherURL=https://github.com/ton-username/Vigile-1.0
 DefaultDirName={autopf}\VIGILE
 DefaultGroupName=VIGILE
-OutputDir=installer_output
+OutputDir=..\..\installer_output
 OutputBaseFilename=VigileSetup-1.0.0
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -23,7 +23,7 @@ Name: "desktopicon"; Description: "Créer un raccourci sur le Bureau"; \
   GroupDescription: "Icônes supplémentaires :"; Flags: unchecked
 
 [Files]
-Source: "dist\Vigile\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+Source: "..\..\dist\Vigile\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
 [Icons]
 Name: "{group}\VIGILE"; Filename: "{app}\Vigile.exe"
