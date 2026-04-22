@@ -463,6 +463,168 @@ class TitleBar(QFrame):
         super().mouseReleaseEvent(event)
 
 
+class SplashScreen(QWidget):
+    """Splash d'ouverture : fade-in séquentiel logo → nom → auteur, puis fade-out global."""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setStyleSheet(f"background-color: {COLORS['bg']};")
+        screen = QApplication.primaryScreen()
+        if screen:
+            self.setGeometry(screen.geometry())
+        else:
+            self.resize(1280, 800)
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(18)
+        self.logo_label = QLabel("\U0001f6e1")
+        self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.logo_label.setStyleSheet(
+            f"font-size: 90px; color: rgba(13,13,20,0); background: transparent;"
+        )
+        self.name_label = QLabel("V  I  G  I  L  E")
+        self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.name_label.setStyleSheet(
+            f"font-size: 44px; font-weight: 600; letter-spacing: 6px; "
+            f"color: rgba(13,13,20,0); background: transparent;"
+        )
+        self.author_label = QLabel("\u00a9 2026 \u2014 Cr\u00e9\u00e9 par Francis NDAYUBAHA")
+        self.author_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.author_label.setStyleSheet(
+            f"font-size: 11px; color: rgba(13,13,20,0); background: transparent;"
+        )
+        layout.addStretch(1)
+        layout.addWidget(self.logo_label)
+        layout.addWidget(self.name_label)
+        layout.addStretch(1)
+        layout.addWidget(self.author_label)
+        layout.setContentsMargins(0, 40, 0, 40)
+        self._animations: list = []
+
+    def _fade_label(self, label: QLabel, target_color: str, duration: int) -> None:
+        """Anime la couleur CSS d'un label de transparent vers target_color."""
+        start = QColor(13, 13, 20, 0)
+        end = QColor(target_color)
+        anim = QVariantAnimation(self, duration=duration)
+        anim.setStartValue(start)
+        anim.setEndValue(end)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        current_style = label.styleSheet()
+
+        def _update(color: QColor) -> None:
+            css = current_style
+            # remplace la valeur color: ... existante
+            import re
+            css = re.sub(
+                r"color:[^;]+;",
+                f"color: rgba({color.red()},{color.green()},{color.blue()},{color.alpha()});",
+                css,
+            )
+            label.setStyleSheet(css)
+
+        anim.valueChanged.connect(_update)
+        anim.start()
+        self._animations.append(anim)
+
+    def run(self, on_finished: Callable) -> None:
+        QTimer.singleShot(400,  lambda: self._fade_label(self.logo_label,   COLORS["info"],   800))
+        QTimer.singleShot(1400, lambda: self._fade_label(self.name_label,   COLORS["text"],   800))
+        QTimer.singleShot(2600, lambda: self._fade_label(self.author_label, COLORS["muted"], 1000))
+        fade_out = QPropertyAnimation(self, b"windowOpacity", self)
+        fade_out.setDuration(600)
+        fade_out.setStartValue(1.0)
+        fade_out.setEndValue(0.0)
+        fade_out.setEasingCurve(QEasingCurve.Type.InCubic)
+        self._fade_out_anim = fade_out
+
+        def _start_fadeout():
+            fade_out.start()
+
+        def _finish():
+            on_finished()
+            self.close()
+
+        QTimer.singleShot(4800, _start_fadeout)
+        QTimer.singleShot(5400, _finish)
+
+
+class SplashClosing(QWidget):
+    """Splash de fermeture : éléments visibles dès le départ, fade-out séquentiel."""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setStyleSheet(f"background-color: {COLORS['bg']};")
+        screen = QApplication.primaryScreen()
+        if screen:
+            self.setGeometry(screen.geometry())
+        else:
+            self.resize(1280, 800)
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(18)
+        self.logo_label = QLabel("\U0001f6e1")
+        self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.logo_label.setStyleSheet(
+            f"font-size: 90px; color: {COLORS['info']}; background: transparent;"
+        )
+        self.name_label = QLabel("V  I  G  I  L  E")
+        self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.name_label.setStyleSheet(
+            f"font-size: 44px; font-weight: 600; letter-spacing: 6px; "
+            f"color: {COLORS['text']}; background: transparent;"
+        )
+        self.author_label = QLabel("\u00a9 2026 \u2014 Cr\u00e9\u00e9 par Francis NDAYUBAHA")
+        self.author_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.author_label.setStyleSheet(
+            f"font-size: 11px; color: {COLORS['muted']}; background: transparent;"
+        )
+        layout.addStretch(1)
+        layout.addWidget(self.logo_label)
+        layout.addWidget(self.name_label)
+        layout.addStretch(1)
+        layout.addWidget(self.author_label)
+        layout.setContentsMargins(0, 40, 0, 40)
+        self._animations: list = []
+
+    def _fade_label(self, label: QLabel, duration: int) -> None:
+        """Anime la couleur CSS d'un label vers la couleur de fond (invisible)."""
+        import re
+        current_style = label.styleSheet()
+        match = re.search(r"color:\s*([^;]+);", current_style)
+        start_color = QColor(match.group(1).strip()) if match else QColor(COLORS["text"])
+        end_color = QColor(13, 13, 20, 0)
+        anim = QVariantAnimation(self, duration=duration)
+        anim.setStartValue(start_color)
+        anim.setEndValue(end_color)
+        anim.setEasingCurve(QEasingCurve.Type.InCubic)
+
+        def _update(color: QColor) -> None:
+            css = re.sub(
+                r"color:[^;]+;",
+                f"color: rgba({color.red()},{color.green()},{color.blue()},{color.alpha()});",
+                current_style,
+            )
+            label.setStyleSheet(css)
+
+        anim.valueChanged.connect(_update)
+        anim.start()
+        self._animations.append(anim)
+
+    def run(self) -> None:
+        QTimer.singleShot(400,  lambda: self._fade_label(self.author_label,  800))
+        QTimer.singleShot(1400, lambda: self._fade_label(self.name_label,    800))
+        QTimer.singleShot(2600, lambda: self._fade_label(self.logo_label,   1000))
+        QTimer.singleShot(3600, QApplication.quit)
+
+
 class LoginFrame(QWidget):
     login_success = pyqtSignal(dict)
 
@@ -1061,7 +1223,10 @@ class VigileWindow(QMainWindow):
         self.body.setSpacing(12)
         shell_layout.addLayout(self.body)
         outer_layout.addWidget(self.shell)
-        self._show_login()
+        self._closing = False
+        self.splash = SplashScreen()
+        self.splash.show()
+        self.splash.run(on_finished=self._show_login)
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -1167,7 +1332,7 @@ class VigileWindow(QMainWindow):
         self.current_user = None
         self._show_login()
 
-    def closeEvent(self, event) -> None:
+    def _stop_threads(self) -> None:
         for thread in list(getattr(self, "_worker_threads", set())):
             thread.quit()
             thread.wait(1500)
@@ -1176,9 +1341,26 @@ class VigileWindow(QMainWindow):
                 for thread in list(getattr(page, "_worker_threads", set())):
                     thread.quit()
                     thread.wait(1500)
+
+    def _show_closing_splash(self) -> None:
+        if self._closing:
+            return
+        self._closing = True
+        self._stop_threads()
+        self.shell.hide()
+        self._splash_closing = SplashClosing()
+        self._splash_closing.show()
+        self._splash_closing.run()
         if self.tk_root is not None:
-            self.tk_root.after(0, self.tk_root.destroy)
-        super().closeEvent(event)
+            self.tk_root.after(3700, self.tk_root.destroy)
+
+    def closeEvent(self, event) -> None:
+        if self._closing:
+            # Fermeture déjà initiée via le splash — on laisse Qt terminer.
+            event.accept()
+            return
+        event.ignore()
+        self._show_closing_splash()
 
 
 class MainWindow:
@@ -1203,5 +1385,4 @@ class MainWindow:
 
     def _afficher_splash_fermeture(self) -> None:
         self._alive = False
-        self.window.close()
-        self.qt_app.quit()
+        self.window._show_closing_splash()
