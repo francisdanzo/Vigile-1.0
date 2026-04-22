@@ -8,7 +8,7 @@ from functools import partial
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QComboBox, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QLineEdit, QTableWidgetItem, QVBoxLayout, QWidget, QInputDialog
+from PyQt6.QtWidgets import QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QLabel, QMessageBox, QLineEdit, QTableWidgetItem, QVBoxLayout, QWidget, QInputDialog
 
 from config import EMPLACEMENTS_MATERIEL, ETATS_MATERIEL, TYPES_MATERIEL
 from database import get_session
@@ -79,11 +79,16 @@ class InventoryFrame(QWidget):
         root.addWidget(filters)
         table_card = StyledCard()
         self.table = VigileTable(["Code", "Type", "Marque / Modèle", "État", "Emplacement", "Attribué à", "Actions"])
-        self.table.setColumnWidth(0, 150)
-        self.table.setColumnWidth(2, 220)
-        self.table.setColumnWidth(6, 260)
+        self.table.setColumnWidth(0, 140)
+        self.table.setColumnWidth(1, 90)
+        self.table.setColumnWidth(2, 180)
+        self.table.setColumnWidth(3, 80)
+        self.table.setColumnWidth(4, 90)
+        self.table.setColumnWidth(5, 110)
+        self.table.setColumnWidth(6, 290)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
         table_card.layout().addWidget(self.table)
-        root.addWidget(table_card)
+        root.addWidget(table_card, 1)
         self.refresh()
 
     @staticmethod
@@ -156,14 +161,18 @@ class InventoryFrame(QWidget):
             self.table.setItem(row_index, 5, QTableWidgetItem(row["attribue"]))
             actions = QWidget()
             actions_layout = QHBoxLayout(actions)
-            actions_layout.setContentsMargins(0, 0, 0, 0)
-            actions_layout.setSpacing(6)
+            actions_layout.setContentsMargins(4, 2, 4, 2)
+            actions_layout.setSpacing(4)
             for label, callback in (
                 ("Voir QR", partial(self.show_qr, row["id"])),
                 ("Attribuer", partial(self.assign, row["id"])),
                 ("Récupérer", partial(self.recover, row["id"])),
             ):
                 button = VigileButton(label, "secondary")
+                button.setFixedHeight(28)
+                button.setStyleSheet(
+                    button.styleSheet().replace("padding: 10px 18px", "padding: 4px 10px")
+                )
                 button.clicked.connect(callback)
                 actions_layout.addWidget(button)
             self.table.setCellWidget(row_index, 6, actions)

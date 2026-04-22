@@ -11,3 +11,4 @@ venv
 vigile.db
 web/__pycache__
 web/__pycache__/__init__.cpython-313.pyc
+diff_before.txt
