@@ -1,0 +1,64 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches:
+      - before
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout branche before
+        uses: actions/checkout@v4
+        with:
+          ref: before
+
+      - name: Installer Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-build.txt
+
+      - name: Build PyInstaller
+        run: pyinstaller --clean vigile.spec
+
+      - name: Vérifier le build
+        run: |
+          if (!(Test-Path "dist\Vigile\Vigile.exe")) {
+            Write-Error "Vigile.exe introuvable dans dist\Vigile\"
+            exit 1
+          }
+          Write-Host "Build OK : dist\Vigile\Vigile.exe trouvé"
+
+      - name: Installer Inno Setup
+        run: choco install innosetup --yes
+
+      - name: Créer l'installateur
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            packaging\windows\vigile.iss
+
+      - name: Vérifier l'installateur
+        run: |
+          if (!(Test-Path "installer_output\VigileSetup-1.0.0.exe")) {
+            Write-Error "Installateur introuvable"
+            exit 1
+          }
+          Write-Host "Installateur OK"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VigileSetup-Windows
+          path: installer_output\VigileSetup-1.0.0.exe
+          retention-days: 30
