@@ -17,6 +17,8 @@ datas = [
     (str(project_dir / "web" / "templates"), "web/templates"),
     # Thème PyQt6
     (str(project_dir / "vigile_theme.qss"), "."),
+    # Logo (splash, login, sidebar, favicon web)
+    (str(project_dir / "assets" / "logo"), "assets/logo"),
 ]
 
 static_dir = project_dir / "web" / "static"
@@ -98,7 +100,7 @@ exe = EXE(
     upx=False,
     console=False,
     disable_windowed_traceback=False,
-    icon=None,
+    icon=str(project_dir / "assets" / "logo" / "vigile.ico"),
 )
 
 coll = COLLECT(

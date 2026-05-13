@@ -12,6 +12,7 @@ SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64
 WizardStyle=modern
 UninstallDisplayIcon={app}\Vigile.exe
+SetupIconFile=..\..\assets\logo\vigile.ico
 PrivilegesRequired=lowest
 
 [Languages]

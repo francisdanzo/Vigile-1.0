@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
     QButtonGroup,
     QFrame,
     QGraphicsDropShadowEffect,
+    QGraphicsOpacityEffect,
     QGridLayout,
     QHeaderView,
     QHBoxLayout,
@@ -51,7 +52,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config import APP_NAME, APP_SLOGAN, ATTRIBUTION_ALERTE_JOURS, ETATS_MATERIEL, FLASK_PORT
+from config import APP_NAME, APP_SLOGAN, ATTRIBUTION_ALERTE_JOURS, BASE_DIR, ETATS_MATERIEL, FLASK_PORT
 from database import get_session
 from models import Attribution, Materiel, User
 from qr.generator import generer_qr_code
@@ -88,6 +89,16 @@ QSS_PATH = Path(__file__).resolve().parent.parent / "vigile_theme.qss"
 def alpha(color: str, value: int) -> str:
     qcolor = QColor(color)
     return f"rgba({qcolor.red()}, {qcolor.green()}, {qcolor.blue()}, {value})"
+
+
+def _logo_pixmap(size: int) -> QPixmap | None:
+    path = os.path.join(BASE_DIR, "assets", "logo", "logo.png")
+    if not os.path.exists(path):
+        return None
+    px = QPixmap(path)
+    if px.isNull():
+        return None
+    return px.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
 
 
 def clear_layout(layout: QLayout) -> None:
@@ -480,11 +491,18 @@ class SplashScreen(QWidget):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setSpacing(18)
-        self.logo_label = QLabel("\U0001f6e1")
+        self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.logo_label.setStyleSheet(
-            f"font-size: 90px; color: rgba(13,13,20,0); background: transparent;"
-        )
+        _px = _logo_pixmap(100)
+        if _px:
+            self.logo_label.setPixmap(_px)
+            self.logo_label.setStyleSheet("background: transparent;")
+        else:
+            self.logo_label.setText("\U0001f6e1")
+            self.logo_label.setStyleSheet("font-size: 90px; color: rgba(13,13,20,0); background: transparent;")
+        self._logo_effect = QGraphicsOpacityEffect(self.logo_label)
+        self._logo_effect.setOpacity(0.0)
+        self.logo_label.setGraphicsEffect(self._logo_effect)
         self.name_label = QLabel("V  I  G  I  L  E")
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.name_label.setStyleSheet(
@@ -503,6 +521,15 @@ class SplashScreen(QWidget):
         layout.addWidget(self.author_label)
         layout.setContentsMargins(0, 40, 0, 40)
         self._animations: list = []
+
+    def _fade_logo_in(self, duration: int) -> None:
+        anim = QPropertyAnimation(self._logo_effect, b"opacity", self)
+        anim.setDuration(duration)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.start()
+        self._animations.append(anim)
 
     def _fade_label(self, label: QLabel, target_color: str, duration: int) -> None:
         """Anime la couleur CSS d'un label de transparent vers target_color."""
@@ -530,7 +557,7 @@ class SplashScreen(QWidget):
         self._animations.append(anim)
 
     def run(self, on_finished: Callable) -> None:
-        QTimer.singleShot(400,  lambda: self._fade_label(self.logo_label,   COLORS["info"],   800))
+        QTimer.singleShot(400,  lambda: self._fade_logo_in(800))
         QTimer.singleShot(1400, lambda: self._fade_label(self.name_label,   COLORS["text"],   800))
         QTimer.singleShot(2600, lambda: self._fade_label(self.author_label, COLORS["muted"], 1000))
         fade_out = QPropertyAnimation(self, b"windowOpacity", self)
@@ -569,11 +596,18 @@ class SplashClosing(QWidget):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setSpacing(18)
-        self.logo_label = QLabel("\U0001f6e1")
+        self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.logo_label.setStyleSheet(
-            f"font-size: 90px; color: {COLORS['info']}; background: transparent;"
-        )
+        _px = _logo_pixmap(100)
+        if _px:
+            self.logo_label.setPixmap(_px)
+            self.logo_label.setStyleSheet("background: transparent;")
+        else:
+            self.logo_label.setText("\U0001f6e1")
+            self.logo_label.setStyleSheet(f"font-size: 90px; color: {COLORS['info']}; background: transparent;")
+        self._logo_effect = QGraphicsOpacityEffect(self.logo_label)
+        self._logo_effect.setOpacity(1.0)
+        self.logo_label.setGraphicsEffect(self._logo_effect)
         self.name_label = QLabel("V  I  G  I  L  E")
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.name_label.setStyleSheet(
@@ -592,6 +626,15 @@ class SplashClosing(QWidget):
         layout.addWidget(self.author_label)
         layout.setContentsMargins(0, 40, 0, 40)
         self._animations: list = []
+
+    def _fade_logo_out(self, duration: int) -> None:
+        anim = QPropertyAnimation(self._logo_effect, b"opacity", self)
+        anim.setDuration(duration)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.0)
+        anim.setEasingCurve(QEasingCurve.Type.InCubic)
+        anim.start()
+        self._animations.append(anim)
 
     def _fade_label(self, label: QLabel, duration: int) -> None:
         """Anime la couleur CSS d'un label vers la couleur de fond (invisible)."""
@@ -620,7 +663,7 @@ class SplashClosing(QWidget):
     def run(self) -> None:
         QTimer.singleShot(400,  lambda: self._fade_label(self.author_label,  800))
         QTimer.singleShot(1400, lambda: self._fade_label(self.name_label,    800))
-        QTimer.singleShot(2600, lambda: self._fade_label(self.logo_label,   1000))
+        QTimer.singleShot(2600, lambda: self._fade_logo_out(1000))
         QTimer.singleShot(3600, QApplication.quit)
 
 
@@ -637,9 +680,18 @@ class LoginFrame(QWidget):
         center_layout = QVBoxLayout(center)
         center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         center_layout.setSpacing(10)
-        self.logo = QLabel("🛡")
+        self.logo = QLabel()
         self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.logo.setStyleSheet(f"font-size: 52px; color: {COLORS['primary']};")
+        _px = _logo_pixmap(80)
+        if _px:
+            self.logo.setPixmap(_px)
+            self.logo.setStyleSheet("background: transparent;")
+        else:
+            self.logo.setText("🛡")
+            self.logo.setStyleSheet(f"font-size: 52px; color: {COLORS['primary']};")
+        self._logo_effect = QGraphicsOpacityEffect(self.logo)
+        self._logo_effect.setOpacity(0.0)
+        self.logo.setGraphicsEffect(self._logo_effect)
         center_layout.addWidget(self.logo)
         title = QLabel(APP_NAME)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -679,11 +731,11 @@ class LoginFrame(QWidget):
         self._intro()
 
     def _intro(self) -> None:
-        # L'animation reste sobre pour donner un signal premium sans ralentir la saisie.
-        animation = QVariantAnimation(self, duration=800)
-        animation.setStartValue(0.8)
+        animation = QPropertyAnimation(self._logo_effect, b"opacity", self)
+        animation.setDuration(800)
+        animation.setStartValue(0.0)
         animation.setEndValue(1.0)
-        animation.valueChanged.connect(lambda value: self.logo.setStyleSheet(f"font-size: {int(52 * value)}px; color: {COLORS['primary']};"))
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         animation.start()
         self._animation = animation
 
@@ -1188,21 +1240,28 @@ class Sidebar(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 14, 12, 14)
         layout.setSpacing(8)
-        self.logo = QLabel("🛡")
+        self.logo = QLabel()
         self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.logo.setStyleSheet(f"font-size: 26px; color: {COLORS['primary']};")
+        _px = _logo_pixmap(44)
+        if _px:
+            self.logo.setPixmap(_px)
+            self.logo.setStyleSheet("background: transparent;")
+        else:
+            self.logo.setText("🛡")
+            self.logo.setStyleSheet(f"font-size: 26px; color: {COLORS['primary']};")
+        self._logo_effect = QGraphicsOpacityEffect(self.logo)
+        self._logo_effect.setOpacity(1.0)
+        self.logo.setGraphicsEffect(self._logo_effect)
         layout.addWidget(self.logo)
         brand = QLabel(APP_NAME)
         brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
         brand.setStyleSheet("font-size: 15px; font-weight: 600;")
         layout.addWidget(brand)
-        animation = QVariantAnimation(self, duration=900)
-        animation.setStartValue(70)
-        animation.setEndValue(255)
+        animation = QVariantAnimation(self, duration=1800)
+        animation.setStartValue(0.55)
+        animation.setEndValue(1.0)
         animation.setLoopCount(-1)
-        animation.valueChanged.connect(
-            lambda value: self.logo.setStyleSheet(f"font-size: 26px; color: rgba(124,107,255,{int(value)});")
-        )
+        animation.valueChanged.connect(lambda value: self._logo_effect.setOpacity(value))
         animation.start()
         self._logo_animation = animation
         divider = QFrame()

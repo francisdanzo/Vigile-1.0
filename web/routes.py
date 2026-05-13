@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import (
     Flask, Blueprint, render_template, request,
-    redirect, url_for, flash, jsonify, abort, current_app
+    redirect, url_for, flash, jsonify, abort, current_app, send_file
 )
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import (
     SECRET_KEY, APP_NAME, APP_SLOGAN, APP_VERSION,
     TYPES_MATERIEL, ETATS_MATERIEL, EMPLACEMENTS_MATERIEL, FLASK_PORT,
-    ATTRIBUTION_ALERTE_JOURS,
+    ATTRIBUTION_ALERTE_JOURS, BASE_DIR,
 )
 from database import get_session
 from models import Materiel, Attribution, User
@@ -44,6 +44,14 @@ main_bp = Blueprint("main", __name__)
 def index():
     """Page d'accueil — redirige vers le scanner."""
     return redirect(url_for("main.scan"))
+
+
+@main_bp.route("/logo.png")
+def serve_logo():
+    path = os.path.join(BASE_DIR, "assets", "logo", "logo.png")
+    if os.path.exists(path):
+        return send_file(path, mimetype="image/png")
+    abort(404)
 
 
 
