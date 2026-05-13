@@ -13,15 +13,13 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout branche before
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: before
 
-      - name: Installer Python 3.11
+      - name: Installer Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Installer les dépendances
         run: |
@@ -33,8 +31,18 @@ jobs:
         run: |
           python -c "import PyQt6; print('PyQt6 OK:', PyQt6.__file__)"
           python -c "from PyQt6.QtWidgets import QApplication; print('QtWidgets OK')"
-          python -c "from PyQt6.QtCore import Qt; print('QtCore OK')"
-          pip list | findstr -i pyqt
+          python -c "import flask; print('Flask OK:', flask.__version__)"
+          python -c "import sqlalchemy; print('SQLAlchemy OK:', sqlalchemy.__version__)"
+          pip list | findstr -i "pyqt pyinstaller"
+
+      - name: Télécharger cloudflared Windows
+        run: |
+          $url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+          New-Item -ItemType Directory -Force -Path "tunnel" | Out-Null
+          Invoke-WebRequest -Uri $url -OutFile "tunnel\cloudflared.exe"
+          $sizeMB = [math]::Round((Get-Item "tunnel\cloudflared.exe").Length / 1MB, 1)
+          Write-Host "cloudflared.exe téléchargé : $sizeMB MB"
+        shell: pwsh
 
       - name: Build PyInstaller
         run: pyinstaller --clean vigile.spec
@@ -45,41 +53,53 @@ jobs:
             Write-Error "Vigile.exe introuvable dans dist\Vigile\"
             exit 1
           }
-          Write-Host "Build OK : dist\Vigile\Vigile.exe trouvé"
-          # Afficher la taille du dossier pour diagnostic
-          $size = (Get-ChildItem -Recurse "dist\Vigile" | Measure-Object -Property Length -Sum).Sum / 1MB
-          Write-Host "Taille totale du build: $([math]::Round($size, 2)) MB"
+          $sizeMB = [math]::Round((Get-ChildItem -Recurse "dist\Vigile" | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
+          Write-Host "Build OK — dist\Vigile\Vigile.exe ($sizeMB MB total)"
+        shell: pwsh
 
       - name: Vérifier les DLLs Qt
         run: |
-          $qtCore = Get-ChildItem -Recurse "dist\Vigile" -Filter "QtCore*" | Select-Object -First 1
-          if ($qtCore) {
-            Write-Host "Qt DLLs trouvées: $($qtCore.FullName)"
+          $qtDll = Get-ChildItem -Recurse "dist\Vigile" -Filter "Qt6Core*" | Select-Object -First 1
+          if ($qtDll) {
+            Write-Host "Qt6 DLL trouvée : $($qtDll.FullName)"
           } else {
-            Write-Error "ATTENTION: Aucune DLL Qt trouvée dans le build!"
+            Write-Error "Aucune DLL Qt6 trouvée — le build est probablement incomplet"
             exit 1
           }
+        shell: pwsh
 
       - name: Installer Inno Setup
-        run: choco install innosetup --yes
+        run: choco install innosetup --yes --no-progress
+        shell: pwsh
 
       - name: Créer l'installateur
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
-            packaging\windows\vigile.iss
+          # Chercher ISCC.exe (choco l'ajoute au PATH mais le shell doit être rafraîchi)
+          $iscc = Get-ChildItem "C:\Program Files (x86)" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
+                  Select-Object -First 1 -ExpandProperty FullName
+          if (-not $iscc) {
+            Write-Error "ISCC.exe introuvable — Inno Setup n'est pas installé correctement"
+            exit 1
+          }
+          Write-Host "Inno Setup trouvé : $iscc"
+          New-Item -ItemType Directory -Force -Path "installer_output" | Out-Null
+          & $iscc packaging\windows\vigile.iss
+        shell: pwsh
 
       - name: Vérifier l'installateur
         run: |
           if (!(Test-Path "installer_output\VigileSetup-1.0.0.exe")) {
-            Write-Error "Installateur introuvable"
+            Write-Error "Installateur introuvable dans installer_output\"
             exit 1
           }
-          $size = (Get-Item "installer_output\VigileSetup-1.0.0.exe").Length / 1MB
-          Write-Host "Installateur OK: $([math]::Round($size, 2)) MB"
+          $sizeMB = [math]::Round((Get-Item "installer_output\VigileSetup-1.0.0.exe").Length / 1MB, 1)
+          Write-Host "Installateur OK : VigileSetup-1.0.0.exe ($sizeMB MB)"
+        shell: pwsh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VigileSetup-Windows
+          name: VigileSetup-Windows-${{ github.sha }}
           path: installer_output\VigileSetup-1.0.0.exe
           retention-days: 30
+          if-no-files-found: error

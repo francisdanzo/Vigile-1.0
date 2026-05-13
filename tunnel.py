@@ -23,10 +23,10 @@ from pathlib import Path
 
 # Importer les constantes de config
 try:
-    from config import BASE_DIR, FLASK_PORT
+    from config import BASE_DIR, DATA_DIR, FLASK_PORT
 except ImportError:
-    # Fallback pour les tests unitaires
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATA_DIR = os.path.join(os.path.expanduser("~"), ".vigile")
     FLASK_PORT = 5000
 
 
@@ -34,7 +34,12 @@ except ImportError:
 # Chemins
 # =============================================================================
 
-TUNNEL_DIR = os.path.join(BASE_DIR, "tunnel")
+# En mode frozen (PyInstaller), BASE_DIR = sys._MEIPASS (répertoire temporaire en lecture seule).
+# cloudflared doit persister dans DATA_DIR entre les redémarrages de l'application.
+if getattr(sys, 'frozen', False):
+    TUNNEL_DIR = os.path.join(DATA_DIR, "tunnel")
+else:
+    TUNNEL_DIR = os.path.join(BASE_DIR, "tunnel")
 os.makedirs(TUNNEL_DIR, exist_ok=True)
 
 # Nom de l'exécutable selon l'OS
@@ -88,6 +93,18 @@ def telecharger_cloudflared(callback_progression=None) -> bool:
 
     if os.path.exists(chemin):
         return True
+
+    # En mode frozen, PyInstaller peut avoir embarqué cloudflared dans sys._MEIPASS/tunnel/.
+    # On le copie vers DATA_DIR/tunnel/ pour qu'il persiste entre les redémarrages.
+    if getattr(sys, 'frozen', False):
+        import shutil as _shutil
+        bundled = os.path.join(sys._MEIPASS, "tunnel", os.path.basename(chemin))
+        if os.path.exists(bundled):
+            os.makedirs(os.path.dirname(chemin), exist_ok=True)
+            _shutil.copy2(bundled, chemin)
+            if platform.system() != "Windows":
+                os.chmod(chemin, os.stat(chemin).st_mode | stat.S_IEXEC)
+            return True
 
     url = _get_download_url()
     tmp = chemin + ".tmp"

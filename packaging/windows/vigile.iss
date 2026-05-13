@@ -2,7 +2,7 @@
 AppName=VIGILE
 AppVersion=1.0.0
 AppPublisher=Francis NDAYUBAHA
-AppPublisherURL=https://github.com/ton-username/Vigile-1.0
+AppPublisherURL=https://github.com/francisdanzo/Vigile-1.0
 DefaultDirName={autopf}\VIGILE
 DefaultGroupName=VIGILE
 OutputDir=..\..\installer_output
@@ -12,7 +12,6 @@ SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64
 WizardStyle=modern
 UninstallDisplayIcon={app}\Vigile.exe
-LicenseFile=
 PrivilegesRequired=lowest
 
 [Languages]
