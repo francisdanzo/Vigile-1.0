@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config import ROLES_UTILISATEUR
+from config import ROLES_UTILISATEUR, PASSWORD_MIN_LENGTH
 from database import get_session
 from desktop.main_window import StyledCard, VigileButton, VigileTable, run_in_thread
 from models import User
@@ -129,6 +129,10 @@ class UserManagerFrame(QWidget):
         if not username or not email or not password:
             QMessageBox.warning(self, "Validation", "Tous les champs sont obligatoires.")
             return
+        if len(password) < PASSWORD_MIN_LENGTH:
+            QMessageBox.warning(self, "Mot de passe trop court",
+                f"Le mot de passe doit contenir au moins {PASSWORD_MIN_LENGTH} caractères.")
+            return
         if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
             QMessageBox.warning(self, "Validation", "Email invalide.")
             return
@@ -164,7 +168,11 @@ class UserManagerFrame(QWidget):
         if user_id is None:
             return
         password, ok = QInputDialog.getText(self, "Réinitialiser le mot de passe", "Nouveau mot de passe")
-        if not ok or len(password) < 4:
+        if not ok:
+            return
+        if len(password) < PASSWORD_MIN_LENGTH:
+            QMessageBox.warning(self, "Mot de passe trop court",
+                f"Le mot de passe doit contenir au moins {PASSWORD_MIN_LENGTH} caractères.")
             return
         session = get_session()
         try:

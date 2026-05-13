@@ -12,11 +12,11 @@ Routes principales de l'application web :
 
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import (
     Flask, Blueprint, render_template, request,
-    redirect, url_for, flash, jsonify, abort
+    redirect, url_for, flash, jsonify, abort, current_app
 )
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
@@ -25,7 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import (
     SECRET_KEY, APP_NAME, APP_SLOGAN, APP_VERSION,
-    TYPES_MATERIEL, ETATS_MATERIEL, EMPLACEMENTS_MATERIEL, FLASK_PORT
+    TYPES_MATERIEL, ETATS_MATERIEL, EMPLACEMENTS_MATERIEL, FLASK_PORT,
+    ATTRIBUTION_ALERTE_JOURS,
 )
 from database import get_session
 from models import Materiel, Attribution, User
@@ -44,17 +45,6 @@ def index():
     """Page d'accueil — redirige vers le scanner."""
     return redirect(url_for("main.scan"))
 
-
-@main_bp.route("/__shutdown__", methods=["POST"])
-def shutdown_server():
-    """Arrête proprement le serveur local depuis l'interface de bureau."""
-    if request.remote_addr not in ("127.0.0.1", "::1"):
-        abort(403)
-    shutdown = request.environ.get("werkzeug.server.shutdown")
-    if shutdown is None:
-        abort(500, "Impossible d'arrêter le serveur")
-    shutdown()
-    return "OK"
 
 
 @main_bp.route("/scan")
@@ -300,7 +290,24 @@ def dashboard():
             .limit(10)
             .all()
         )
-        
+
+        # Alertes attributions longues durée
+        seuil = datetime.now(timezone.utc) - timedelta(days=ATTRIBUTION_ALERTE_JOURS)
+        overdue = (
+            session.query(Attribution)
+            .filter(Attribution.is_active == True, Attribution.date_attribution < seuil)
+            .options(joinedload(Attribution.materiel))
+            .all()
+        )
+        alerts = [
+            {
+                "code": a.materiel.code_vigile if a.materiel else "—",
+                "person": a.attribue_a,
+                "days": (datetime.now(timezone.utc) - a.date_attribution.replace(tzinfo=timezone.utc)).days,
+            }
+            for a in overdue
+        ]
+
         return render_template(
             "dashboard.html",
             stats={
@@ -309,7 +316,9 @@ def dashboard():
                 "disponible": disponible,
                 "en_panne": en_panne
             },
-            activites=activites
+            activites=activites,
+            alerts=alerts,
+            alerte_jours=ATTRIBUTION_ALERTE_JOURS,
         )
     finally:
         session.close()
@@ -466,17 +475,20 @@ def ajouter_materiel():
             session.add(materiel)
             session.flush()
 
-            # Générer le QR code
-            import socket
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
-                ip = s.getsockname()[0]
-                s.close()
-            except Exception:
-                ip = "127.0.0.1"
-
-            qr_path = generer_qr_code(code_vigile, host=ip, port=FLASK_PORT)
+            # Générer le QR code — utilise l'URL du tunnel si actif, sinon IP locale
+            import socket as _socket
+            public_url = current_app.config.get("VIGILE_PUBLIC_URL", "")
+            if public_url:
+                qr_path = generer_qr_code(code_vigile, url=f"{public_url}/materiel/{code_vigile}")
+            else:
+                try:
+                    s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    ip = s.getsockname()[0]
+                    s.close()
+                except Exception:
+                    ip = "127.0.0.1"
+                qr_path = generer_qr_code(code_vigile, host=ip, port=FLASK_PORT)
             materiel.qr_code_path = qr_path
 
             session.commit()

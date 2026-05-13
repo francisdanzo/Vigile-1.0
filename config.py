@@ -43,8 +43,22 @@ SQLALCHEMY_DATABASE_URI = f"sqlite:///{DATABASE_PATH}"
 FLASK_PORT = 5000
 
 # Clé secrète pour les sessions Flask
-# Générée aléatoirement au premier import, persiste tant que l'app tourne
-SECRET_KEY = secrets.token_hex(32)
+# Chargée depuis le disque (ou créée au premier lancement) pour que les sessions
+# restent valides entre les redémarrages de l'application.
+def _load_secret_key() -> str:
+    key_file = os.path.join(DATA_DIR, ".secret_key")
+    if os.path.exists(key_file):
+        with open(key_file, "r") as _f:
+            key = _f.read().strip()
+            if key:
+                return key
+    key = secrets.token_hex(32)
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(key_file, "w") as _f:
+        _f.write(key)
+    return key
+
+SECRET_KEY = _load_secret_key()
 
 # Désactiver le mode debug en production
 FLASK_DEBUG = False
@@ -107,6 +121,19 @@ ROLES_UTILISATEUR = [
     "admin",
     "gestionnaire"
 ]
+
+# =============================================================================
+# Politique de mot de passe
+# =============================================================================
+
+PASSWORD_MIN_LENGTH = 8
+
+# =============================================================================
+# Alertes d'attributions
+# =============================================================================
+
+# Nombre de jours au-delà duquel une attribution active est considérée "longue"
+ATTRIBUTION_ALERTE_JOURS = 30
 
 # =============================================================================
 # Paramètres QR Code

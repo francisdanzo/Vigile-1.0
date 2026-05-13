@@ -39,6 +39,30 @@
     </article>
 </section>
 
+{% if alerts %}
+<section class="card" style="border: 1px solid rgba(255,179,71,0.4);">
+    <div>
+        <h2 class="card-title" style="color: var(--accent-warning);">⚠ Attributions longues (> {{ alerte_jours }} jours)</h2>
+        <p class="card-subtitle">Ces matériels sont attribués depuis plus de {{ alerte_jours }} jours sans retour enregistré.</p>
+    </div>
+    <div class="activity-list">
+        {% for alert in alerts %}
+        <article class="activity-item" style="border-left: 3px solid var(--accent-warning); padding-left: 10px;">
+            <div class="history-item-header">
+                <div>
+                    <div class="history-strong">{{ alert.code }}</div>
+                    <div class="history-meta">{{ alert.person }}</div>
+                </div>
+                <span class="badge" style="background: rgba(255,179,71,0.18); color: var(--accent-warning);">
+                    {{ alert.days }} j
+                </span>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
 <section class="card">
     <div>
         <h2 class="card-title">Activité récente</h2>

@@ -29,6 +29,13 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-build.txt
 
+      - name: Diagnostiquer les dépendances
+        run: |
+          python -c "import PyQt6; print('PyQt6 OK:', PyQt6.__file__)"
+          python -c "from PyQt6.QtWidgets import QApplication; print('QtWidgets OK')"
+          python -c "from PyQt6.QtCore import Qt; print('QtCore OK')"
+          pip list | findstr -i pyqt
+
       - name: Build PyInstaller
         run: pyinstaller --clean vigile.spec
 
@@ -39,6 +46,19 @@ jobs:
             exit 1
           }
           Write-Host "Build OK : dist\Vigile\Vigile.exe trouvé"
+          # Afficher la taille du dossier pour diagnostic
+          $size = (Get-ChildItem -Recurse "dist\Vigile" | Measure-Object -Property Length -Sum).Sum / 1MB
+          Write-Host "Taille totale du build: $([math]::Round($size, 2)) MB"
+
+      - name: Vérifier les DLLs Qt
+        run: |
+          $qtCore = Get-ChildItem -Recurse "dist\Vigile" -Filter "QtCore*" | Select-Object -First 1
+          if ($qtCore) {
+            Write-Host "Qt DLLs trouvées: $($qtCore.FullName)"
+          } else {
+            Write-Error "ATTENTION: Aucune DLL Qt trouvée dans le build!"
+            exit 1
+          }
 
       - name: Installer Inno Setup
         run: choco install innosetup --yes
@@ -54,7 +74,8 @@ jobs:
             Write-Error "Installateur introuvable"
             exit 1
           }
-          Write-Host "Installateur OK"
+          $size = (Get-Item "installer_output\VigileSetup-1.0.0.exe").Length / 1MB
+          Write-Host "Installateur OK: $([math]::Round($size, 2)) MB"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

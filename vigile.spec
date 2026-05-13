@@ -22,6 +22,7 @@ a = Analysis(
         "PyQt6.QtCore",
         "PyQt6.QtGui",
         "PyQt6.QtWidgets",
+        "PyQt6.sip",
         "PIL.Image",
         "PIL.ImageTk",
         "sqlalchemy.dialects.sqlite",
@@ -31,7 +32,7 @@ a = Analysis(
     ],
     hookspath=[],
     runtime_hooks=[],
-    excludes=["tkinter"],
+    excludes=[],
     cipher=block_cipher,
     noarchive=False,
 )
@@ -48,7 +49,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     icon=None,
 )

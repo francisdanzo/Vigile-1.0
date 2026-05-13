@@ -5,7 +5,6 @@ import socket
 import subprocess
 import sys
 import threading
-import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -52,7 +51,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config import APP_NAME, APP_SLOGAN, ETATS_MATERIEL, FLASK_PORT
+from config import APP_NAME, APP_SLOGAN, ATTRIBUTION_ALERTE_JOURS, ETATS_MATERIEL, FLASK_PORT
 from database import get_session
 from models import Attribution, Materiel, User
 from qr.generator import generer_qr_code
@@ -781,6 +780,24 @@ class DashboardFrame(QWidget):
             self.kpis[key] = value
             self.kpi_layout.addWidget(card, index // 2, index % 2)
         layout.addLayout(self.kpi_layout)
+
+        # Section alertes — masquée par défaut, affichée si attributions > ATTRIBUTION_ALERTE_JOURS
+        self.alert_card = StyledCard()
+        alert_title_row = QHBoxLayout()
+        alert_icon = QLabel("⚠")
+        alert_icon.setStyleSheet(f"color: {COLORS['warning']}; font-size: 16px;")
+        alert_heading = QLabel(f"Attributions longues (> {ATTRIBUTION_ALERTE_JOURS} j)")
+        alert_heading.setStyleSheet(f"font-weight: 600; color: {COLORS['warning']};")
+        alert_title_row.addWidget(alert_icon)
+        alert_title_row.addWidget(alert_heading)
+        alert_title_row.addStretch(1)
+        self.alert_card.layout().addLayout(alert_title_row)
+        self.alert_table = VigileTable(["Code", "Attribué à", "Depuis (jours)"])
+        self.alert_table.setMaximumHeight(160)
+        self.alert_card.layout().addWidget(self.alert_table)
+        self.alert_card.hide()
+        layout.addWidget(self.alert_card)
+
         lower = QHBoxLayout()
         lower.setSpacing(18)
         distribution = StyledCard()
@@ -811,6 +828,7 @@ class DashboardFrame(QWidget):
 
     @staticmethod
     def _load() -> dict:
+        from datetime import timedelta, timezone
         session = get_session()
         try:
             total = session.query(Materiel).count()
@@ -831,10 +849,27 @@ class DashboardFrame(QWidget):
                         "date": attr.date_attribution.strftime("%d/%m/%Y %H:%M"),
                     }
                 )
+            now = datetime.now(timezone.utc)
+            seuil = now - timedelta(days=ATTRIBUTION_ALERTE_JOURS)
+            overdue = (
+                session.query(Attribution)
+                .filter(Attribution.is_active == True, Attribution.date_attribution < seuil)
+                .join(Materiel)
+                .all()
+            )
+            alerts = [
+                {
+                    "code": a.materiel.code_vigile if a.materiel else "—",
+                    "person": a.attribue_a,
+                    "days": (now - a.date_attribution.replace(tzinfo=timezone.utc)).days,
+                }
+                for a in overdue
+            ]
             return {
                 "stats": {"total": total, "disponible": disponible, "attribue": attribue, "maintenance": maintenance},
                 "states": states,
                 "activities": activities,
+                "alerts": alerts,
             }
         finally:
             session.close()
@@ -846,6 +881,21 @@ class DashboardFrame(QWidget):
         for key, label in self.kpis.items():
             label.animate_to(payload["stats"][key])
         self.chart.set_data(payload["states"])
+
+        # Alertes
+        alerts = payload.get("alerts", [])
+        if alerts:
+            self.alert_card.show()
+            self.alert_table.setRowCount(len(alerts))
+            for row, alert in enumerate(alerts):
+                self.alert_table.setItem(row, 0, QTableWidgetItem(alert["code"]))
+                self.alert_table.setItem(row, 1, QTableWidgetItem(alert["person"]))
+                days_item = QTableWidgetItem(str(alert["days"]))
+                days_item.setForeground(QColor(COLORS["warning"]))
+                self.alert_table.setItem(row, 2, days_item)
+        else:
+            self.alert_card.hide()
+
         self.activity_table.setRowCount(0)
         if not payload["activities"]:
             self.activity_table.empty("Aucune attribution récente")
@@ -908,6 +958,7 @@ class ServerFrame(QWidget):
         self.tunnel_thread: TunnelRunner | None = None
         self.local_url = self._local_url()
         self.public_url = ""
+        self._flask_server = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(18)
@@ -985,6 +1036,18 @@ class ServerFrame(QWidget):
         qr_card.layout().addWidget(self.qr_hint)
         self._refresh_qr(None)
         lower.addWidget(qr_card, 1)
+        log_card = StyledCard()
+        log_card.layout().addWidget(QLabel("Journal"))
+        self.log_area = QPlainTextEdit()
+        self.log_area.setReadOnly(True)
+        self.log_area.setMaximumBlockCount(500)
+        self.log_area.setFixedHeight(160)
+        self.log_area.setStyleSheet(
+            f"background: {COLORS['input']}; color: {COLORS['text_secondary']}; "
+            "font-family: monospace; font-size: 11px; border-radius: 8px; border: none; padding: 6px;"
+        )
+        log_card.layout().addWidget(self.log_area)
+        lower.addWidget(log_card, 2)
         layout.addLayout(lower)
 
     def _local_url(self) -> str:
@@ -1014,7 +1077,10 @@ class ServerFrame(QWidget):
             self.qr_hint.hide()
 
     def append_log(self, message: str) -> None:
-        pass
+        self.log_area.appendPlainText(message)
+        self.log_area.verticalScrollBar().setValue(
+            self.log_area.verticalScrollBar().maximum()
+        )
 
     def start_server(self) -> None:
         if self.flask_thread and self.flask_thread.is_alive():
@@ -1022,7 +1088,9 @@ class ServerFrame(QWidget):
             return
 
         def run_server():
-            self.flask_app.run(host="0.0.0.0", port=FLASK_PORT, debug=False, use_reloader=False)
+            from werkzeug.serving import make_server as _make_server
+            self._flask_server = _make_server("0.0.0.0", FLASK_PORT, self.flask_app, threaded=True)
+            self._flask_server.serve_forever()
 
         self.flask_thread = threading.Thread(target=run_server, daemon=True, name="vigile-flask")
         self.flask_thread.start()
@@ -1034,20 +1102,14 @@ class ServerFrame(QWidget):
         self.append_log(f"Serveur démarré sur {self.local_url}")
 
     def stop_server(self) -> None:
-        if not self.flask_thread or not self.flask_thread.is_alive():
-            self.local_status.setText("Serveur arrêté")
-            self.start_server_button.setEnabled(True)
-            self.stop_server_button.setEnabled(False)
-            self.start_tunnel_button.setEnabled(False)
-            return
-        try:
-            request = urllib.request.Request(
-                f"http://127.0.0.1:{FLASK_PORT}/__shutdown__",
-                method="POST",
-            )
-            urllib.request.urlopen(request, timeout=3)
-        except Exception:
-            pass
+        if self._flask_server:
+            server = self._flask_server
+            self._flask_server = None
+            # shutdown() bloque jusqu'à l'arrêt du select-loop (≤ 0.5 s) — on délègue au thread.
+            threading.Thread(target=server.shutdown, daemon=True, name="vigile-flask-stop").start()
+        self.flask_thread = None
+        if self.tunnel_thread and self.tunnel_thread.isRunning():
+            self.tunnel_thread.stop()
         self.local_indicator.stop()
         self.local_status.setText("Serveur arrêté")
         self.start_server_button.setEnabled(True)
@@ -1056,8 +1118,10 @@ class ServerFrame(QWidget):
         self.stop_tunnel_button.setEnabled(False)
         self.copy_public_button.setEnabled(False)
         self.public_url = ""
+        self.flask_app.config["VIGILE_PUBLIC_URL"] = ""
         self.tunnel_label.setText("Tunnel inactif")
         self._refresh_qr(None)
+        self.append_log("Serveur arrêté.")
 
     def start_tunnel(self) -> None:
         if self.tunnel_thread and self.tunnel_thread.isRunning():
@@ -1087,11 +1151,13 @@ class ServerFrame(QWidget):
         self.stop_tunnel_button.setEnabled(False)
         self.copy_public_button.setEnabled(False)
         self.public_url = ""
+        self.flask_app.config["VIGILE_PUBLIC_URL"] = ""
         self.tunnel_label.setText("Tunnel inactif")
         self._refresh_qr(None)
 
     def _on_tunnel_url(self, url: str) -> None:
         self.public_url = url
+        self.flask_app.config["VIGILE_PUBLIC_URL"] = url
         self.tunnel_label.setText(url)
         self.tunnel_status.setText("Tunnel opérationnel")
         self._refresh_qr(url)
@@ -1106,6 +1172,7 @@ class ServerFrame(QWidget):
         self.stop_tunnel_button.setEnabled(False)
         self.copy_public_button.setEnabled(False)
         self.public_url = ""
+        self.flask_app.config["VIGILE_PUBLIC_URL"] = ""
         self.tunnel_label.setText("Tunnel inactif")
         self._refresh_qr(None)
 
@@ -1196,10 +1263,9 @@ class Sidebar(QFrame):
 
 
 class VigileWindow(QMainWindow):
-    def __init__(self, flask_app, tk_root=None):
+    def __init__(self, flask_app):
         super().__init__()
         self.flask_app = flask_app
-        self.tk_root = tk_root
         self.current_user: dict | None = None
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -1274,7 +1340,7 @@ class VigileWindow(QMainWindow):
         self.page_factories = {
             "dashboard": lambda: DashboardFrame(),
             "inventory": lambda: __import__("desktop.inventory_view", fromlist=["InventoryFrame"]).InventoryFrame(self.current_user),
-            "add": lambda: __import__("desktop.add_material", fromlist=["AddMaterialFrame"]).AddMaterialFrame(self.current_user),
+            "add": lambda: __import__("desktop.add_material", fromlist=["AddMaterialFrame"]).AddMaterialFrame(self.current_user, self.flask_app),
             "history": lambda: __import__("desktop.history_view", fromlist=["HistoryFrame"]).HistoryFrame(),
             "users": lambda: __import__("desktop.user_manager", fromlist=["UserManagerFrame"]).UserManagerFrame(),
             "server": lambda: ServerFrame(self.flask_app),
@@ -1351,8 +1417,6 @@ class VigileWindow(QMainWindow):
         self._splash_closing = SplashClosing()
         self._splash_closing.show()
         self._splash_closing.run()
-        if self.tk_root is not None:
-            self.tk_root.after(3700, self.tk_root.destroy)
 
     def closeEvent(self, event) -> None:
         if self._closing:
@@ -1363,26 +1427,3 @@ class VigileWindow(QMainWindow):
         self._show_closing_splash()
 
 
-class MainWindow:
-    """Pont Tkinter -> PyQt6 pour garder app.py inchangé."""
-
-    def __init__(self, root, flask_app):
-        self.root = root
-        self.root.withdraw()
-        self.qt_app = QApplication.instance() or QApplication(sys.argv)
-        load_theme(self.qt_app)
-        self.window = VigileWindow(flask_app=flask_app, tk_root=root)
-        self.window.show()
-        self._alive = True
-        self._pump()
-
-    def _pump(self) -> None:
-        # app.py reste maître du cycle de vie, donc on pompe explicitement l'event loop Qt.
-        if not self._alive:
-            return
-        self.qt_app.processEvents()
-        self.root.after(16, self._pump)
-
-    def _afficher_splash_fermeture(self) -> None:
-        self._alive = False
-        self.window._show_closing_splash()

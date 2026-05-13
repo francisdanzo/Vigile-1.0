@@ -35,9 +35,10 @@ class StepBadge(QLabel):
 
 
 class AddMaterialFrame(QWidget):
-    def __init__(self, current_user: dict):
+    def __init__(self, current_user: dict, flask_app=None):
         super().__init__()
         self.current_user = current_user
+        self.flask_app = flask_app
         self.last_qr_path = ""
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -161,14 +162,18 @@ class AddMaterialFrame(QWidget):
             )
             session.add(materiel)
             session.flush()
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.connect(("8.8.8.8", 80))
-                host = sock.getsockname()[0]
-                sock.close()
-            except Exception:
-                host = "127.0.0.1"
-            qr_path = generer_qr_code(code_vigile, host=host)
+            public_url = self.flask_app.config.get("VIGILE_PUBLIC_URL", "") if self.flask_app else ""
+            if public_url:
+                qr_path = generer_qr_code(code_vigile, url=f"{public_url}/materiel/{code_vigile}")
+            else:
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    sock.connect(("8.8.8.8", 80))
+                    host = sock.getsockname()[0]
+                    sock.close()
+                except Exception:
+                    host = "127.0.0.1"
+                qr_path = generer_qr_code(code_vigile, host=host)
             materiel.qr_code_path = qr_path
             session.commit()
             return code_vigile, qr_path

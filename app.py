@@ -7,10 +7,10 @@ Ce script assemble et lance l'application complète :
 1. Initialise la base de données
 2. Crée l'application Flask
 3. Lance Flask dans un thread séparé (si mode desktop)
-4. Lance l'interface Tkinter dans le thread principal
+4. Lance l'interface PyQt6 dans le thread principal
 
 Usage :
-    python app.py              → Mode complet (Tkinter + Flask)
+    python app.py              → Mode complet (PyQt6 + Flask)
     python app.py --web-only   → Mode serveur uniquement (Flask seul)
 """
 
@@ -35,7 +35,7 @@ def main():
     parser.add_argument(
         "--web-only",
         action="store_true",
-        help="Lance uniquement le serveur Flask (sans interface Tkinter)"
+        help="Lance uniquement le serveur Flask (sans interface PyQt6)"
     )
     parser.add_argument(
         "--port",
@@ -87,8 +87,6 @@ def main():
         print(f"[VIGILE] 👉  http://{ip}:{args.port}")
         print(f"[VIGILE] Ctrl+C pour arrêter\n")
         
-        from ssl_helper import get_ssl_context
-        
         flask_app.run(
             host="0.0.0.0",
             port=args.port,
@@ -98,51 +96,39 @@ def main():
         return
 
     # ==========================================================================
-    # Mode complet : Tkinter + Flask
+    # Mode complet : PyQt6 + Flask
     # ==========================================================================
     print("[VIGILE] Mode complet (Desktop + Web)")
     print()
 
-    # Importer Tkinter
+    # Importer PyQt6
     try:
-        import tkinter as tk
+        from PyQt6.QtWidgets import QApplication
     except ImportError:
-        print("[VIGILE] ERREUR : Tkinter n'est pas disponible !")
-        print("[VIGILE] Installez python3-tk ou lancez avec --web-only")
+        print("[VIGILE] ERREUR : PyQt6 n'est pas disponible !")
+        print("[VIGILE] Installez PyQt6 ou lancez avec --web-only")
         sys.exit(1)
 
-    # Importer la fenêtre principale
-    from desktop.main_window import MainWindow
+    # Importer la fenêtre principale et le thème
+    from desktop.main_window import VigileWindow, load_theme
 
-    # Créer la fenêtre Tkinter
-    root = tk.Tk()
+    # Créer l'application Qt
+    qt_app = QApplication.instance() or QApplication(sys.argv)
+    load_theme(qt_app)
 
-    # Configurer l'icône (si disponible)
-    try:
-        root.iconphoto(False, tk.PhotoImage(data=""))
-    except Exception:
-        pass
+    # Créer et afficher la fenêtre principale
+    window = VigileWindow(flask_app=flask_app)
+    window.show()
 
-    # Créer l'interface principale avec l'app Flask
-    app = MainWindow(root, flask_app=flask_app)
-
-    # Gérer la fermeture propre
-    def on_closing():
-        """Callback de fermeture de l'application."""
-        print("\n[VIGILE] Fermeture de l'application...")
-        app._afficher_splash_fermeture()
-
-    root.protocol("WM_DELETE_WINDOW", on_closing)
-
-    print("[VIGILE] Interface Tkinter prête.")
+    print("[VIGILE] Interface PyQt6 prête.")
     print("[VIGILE] Connectez-vous pour commencer.")
     print()
 
-    # Lancer la boucle principale Tkinter
-    # (Flask est lancé depuis le ServerFrame quand l'utilisateur clique "Démarrer")
-    root.mainloop()
+    # Lancer la boucle principale Qt
+    exit_code = qt_app.exec()
 
     print("[VIGILE] Application fermée. À bientôt !")
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
