@@ -7,7 +7,7 @@
 
 from pathlib import Path
 
-project_dir = Path(__file__).resolve().parent
+project_dir = Path(SPECPATH).resolve()
 block_cipher = None
 
 # ── Données à embarquer ────────────────────────────────────────────────────────
