@@ -3,10 +3,11 @@
 # 🛡 VIGILE
 **"Chaque équipement a sa sentinelle"**
 
+![Version](https://img.shields.io/badge/Version-1.1.0-brightgreen.svg?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.x-blue.svg?style=for-the-badge&logo=python)
 ![Flask](https://img.shields.io/badge/Flask-Web_Framework-black.svg?style=for-the-badge&logo=flask)
 ![SQLite](https://img.shields.io/badge/SQLite-Database-003B57.svg?style=for-the-badge&logo=sqlite)
-![Tkinter](https://img.shields.io/badge/Tkinter-Desktop_UI-lightgrey.svg?style=for-the-badge)
+![PyQt6](https://img.shields.io/badge/PyQt6-Desktop_UI-41CD52.svg?style=for-the-badge&logo=qt)
 
 *Système hyrbide professionnel (Bureau + Web) de gestion et de traçabilité de matériel informatique avec technologie QR Code.*
 
@@ -21,14 +22,16 @@
 ## ✨ Fonctionnalités Principales
 
 ### 💻 Application de Bureau (Gestion Centrale)
-- **Interface Premium** : Design "Dark Mode" élégant, réactif et optimisé pour la lisibilité.
+- **Thème Clair / Sombre** : Basculez à tout moment via le bouton ☀/🌙 dans la barre de titre — la préférence est sauvegardée automatiquement.
+- **Interface Premium** : Design moderne PyQt6, réactif et optimisé pour la lisibilité en mode sombre ou clair.
 - **Gestionnaire d'Inventaire** : Ajoutez, modifiez et suivez chaque pièce d'équipement (Ordinateurs, Moniteurs, Imprimantes...).
 - **Suivi des Attributions** : Prêtez et récupérez du matériel avec un historique complet et traçable.
 - **Module Serveur Intégré** : Lancez et contrôlez le serveur Web Flask directement depuis l'application de bureau en un clic.
 
 ### 🌐 Interface Web & Mobile (Opérations Terrain)
+- **Thème Clair / Sombre** : Toggle ☀/🌙 accessible depuis la page de connexion et toutes les pages — choix persisté dans `localStorage`.
 - **Scanner QR Code Intégré** : Utilisez l'appareil photo de n'importe quel smartphone pour scanner un équipement et accéder immédiatement à sa fiche.
-- **Tableau de Bord & Inventaire** : Parcourez tout votre parc informatique (statistiques en temps réel, alertes de maintenance) via une interface moderne "Glassmorphism" construite avec Bootstrap 5.
+- **Tableau de Bord & Inventaire** : Parcourez tout votre parc informatique (statistiques en temps réel, alertes de maintenance) via une interface mobile-first moderne.
 - **Cloudflare Tunnel (Inclus)** : Le web server local est publiquement exposé via un tunnel HTTPS sécurisé généré automatiquement afin de garantir que les caméras mobiles fonctionnent sans problème de certificats SSL locaux.
 
 ### 🏷️ Technologie VIGILE
@@ -42,8 +45,8 @@
 - **Backend** : Python 3, Flask, Flask-Login.
 - **Base de données** : SQLite via SQLAlchemy (ORM).
 - **Sécurité** : Hachage Bcrypt pour les mots de passe.
-- **Interface Desktop** : Tkinter natif perfectionné avec styles personnalisés.
-- **Interface Web** : HTML5, Vanilla CSS personnalisé, Bootstrap 5, `html5-qrcode` pour le scan caméra.
+- **Interface Desktop** : PyQt6 avec thème clair/sombre, animations et splash screen.
+- **Interface Web** : HTML5, CSS custom (variables de thème), JS vanilla, `jsQR` pour le scan caméra.
 - **Réseau** : `cloudflared` (géré programmatiquement) pour le Tunnel HTTPS.
 
 ---
@@ -119,5 +122,5 @@ Vigile-1.0/
 
 <div align="center">
   Construit avec ❤️ pour simplifier la sécurité et la traçabilité des équipements.<br>
-  <b>2026 — Francis NDAYUBAHA</b>
+  <b>2026 — Francis NDAYUBAHA — v1.1.0</b>
 </div>

@@ -52,13 +52,15 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config import APP_NAME, APP_SLOGAN, ATTRIBUTION_ALERTE_JOURS, BASE_DIR, ETATS_MATERIEL, FLASK_PORT
+from config import APP_NAME, APP_SLOGAN, ATTRIBUTION_ALERTE_JOURS, BASE_DIR, DATA_DIR, ETATS_MATERIEL, FLASK_PORT
 from database import get_session
 from models import Attribution, Materiel, User
 from qr.generator import generer_qr_code
 from tunnel import _get_cloudflared_path, telecharger_cloudflared
 
-COLORS = {
+# ── Palettes de thème ──────────────────────────────────────────────────────────
+
+COLORS_DARK = {
     "bg": "#0d0d14",
     "sidebar": "#111118",
     "card": "#16161f",
@@ -76,14 +78,85 @@ COLORS = {
     "gold": "#f0c040",
 }
 
-STATE_COLORS = {
-    "neuf": COLORS["secondary"],
-    "bon": COLORS["info"],
-    "usagé": COLORS["warning"],
+COLORS_LIGHT = {
+    "bg": "#f2f2f8",
+    "sidebar": "#eaeaf2",
+    "card": "#ffffff",
+    "input": "#f0f0f8",
+    "hover": "#e8e8f2",
+    "primary": "#6150e8",
+    "secondary": "#00aa88",
+    "danger": "#e83058",
+    "warning": "#c07010",
+    "info": "#1a70e8",
+    "text": "#12121a",
+    "text_secondary": "#58587a",
+    "muted": "#9898b8",
+    "border": "#d8d8ea",
+    "gold": "#a06800",
+}
+
+_THEME_FILE = os.path.join(DATA_DIR, "theme.txt")
+_QSS_DARK  = Path(__file__).resolve().parent.parent / "vigile_theme.qss"
+_QSS_LIGHT = Path(__file__).resolve().parent.parent / "vigile_theme_light.qss"
+
+
+def _load_theme_pref() -> str:
+    try:
+        with open(_THEME_FILE, "r") as fh:
+            t = fh.read().strip()
+            return t if t in ("dark", "light") else "dark"
+    except Exception:
+        return "dark"
+
+
+def _save_theme_pref(theme: str) -> None:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(_THEME_FILE, "w") as fh:
+        fh.write(theme)
+
+
+# Palette active — dict mutable mis à jour en place lors du changement de thème
+_current_theme: str = _load_theme_pref()
+COLORS: dict = dict(COLORS_LIGHT if _current_theme == "light" else COLORS_DARK)
+
+STATE_COLORS: dict = {
+    "neuf":     COLORS["secondary"],
+    "bon":      COLORS["info"],
+    "usagé":    COLORS["warning"],
     "en_panne": COLORS["danger"],
 }
 
-QSS_PATH = Path(__file__).resolve().parent.parent / "vigile_theme.qss"
+QSS_PATH = _QSS_LIGHT if _current_theme == "light" else _QSS_DARK
+
+
+def apply_desktop_theme(theme: str) -> None:
+    """Bascule la palette, recharge le QSS et rafraîchit les widgets inline."""
+    global _current_theme, QSS_PATH
+    _current_theme = theme
+    palette = COLORS_LIGHT if theme == "light" else COLORS_DARK
+    COLORS.update(palette)
+    STATE_COLORS.update({
+        "neuf":     COLORS["secondary"],
+        "bon":      COLORS["info"],
+        "usagé":    COLORS["warning"],
+        "en_panne": COLORS["danger"],
+    })
+    QSS_PATH = _QSS_LIGHT if theme == "light" else _QSS_DARK
+    _save_theme_pref(theme)
+
+    app = QApplication.instance()
+    if app and QSS_PATH.exists():
+        app.setStyleSheet(QSS_PATH.read_text(encoding="utf-8"))
+
+    # Rafraîchir les widgets dont le style est défini inline en Python
+    if app:
+        for widget in app.allWidgets():
+            if isinstance(widget, VigileButton):
+                widget._apply_variant()
+            elif isinstance(widget, SidebarButton):
+                widget._refresh_style()
+            widget.update()
 
 
 def alpha(color: str, value: int) -> str:
@@ -130,8 +203,9 @@ def load_theme(app: QApplication) -> None:
     ):
         if os.path.exists(path):
             QFontDatabase.addApplicationFont(path)
-    if QSS_PATH.exists():
-        app.setStyleSheet(QSS_PATH.read_text(encoding="utf-8"))
+    qss = (_QSS_LIGHT if _current_theme == "light" else _QSS_DARK)
+    if qss.exists():
+        app.setStyleSheet(qss.read_text(encoding="utf-8"))
     app.setFont(QFont("Inter", 10))
 
 
@@ -318,6 +392,10 @@ class SidebarButton(QPushButton):
         self.key = key
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._refresh_style()
+        self.clicked.connect(lambda: self.clicked_with_key.emit(self.key))
+
+    def _refresh_style(self) -> None:
         self.setStyleSheet(
             f"QPushButton {{ text-align: left; padding: 12px 16px; border-radius: 10px; "
             f"background: transparent; color: {COLORS['text_secondary']}; font-weight: 500; }}"
@@ -325,7 +403,6 @@ class SidebarButton(QPushButton):
             f"QPushButton:checked {{ background: {alpha(COLORS['primary'], 42)}; color: {COLORS['text']}; "
             f"border-left: 3px solid {COLORS['primary']}; padding-left: 13px; }}"
         )
-        self.clicked.connect(lambda: self.clicked_with_key.emit(self.key))
 
 
 class VigileTable(QTableWidget):
@@ -452,11 +529,21 @@ class TitleBar(QFrame):
         brand.setStyleSheet("font-size: 14px; font-weight: 600;")
         layout.addWidget(brand)
         layout.addStretch(1)
+        self._theme_btn = QPushButton("☀" if _current_theme == "dark" else "🌙")
+        self._theme_btn.setObjectName("TitleButton")
+        self._theme_btn.setToolTip("Basculer thème clair / sombre")
+        self._theme_btn.clicked.connect(self._toggle_theme)
+        layout.addWidget(self._theme_btn)
         for label, handler in (("—", self.window.showMinimized), ("▢", self.window.toggle_maximize), ("✕", self.window.close)):
             button = QPushButton(label)
             button.setObjectName("TitleButton")
             button.clicked.connect(handler)
             layout.addWidget(button)
+
+    def _toggle_theme(self) -> None:
+        new_theme = "light" if _current_theme == "dark" else "dark"
+        apply_desktop_theme(new_theme)
+        self._theme_btn.setText("☀" if _current_theme == "dark" else "🌙")
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -665,6 +752,137 @@ class SplashClosing(QWidget):
         QTimer.singleShot(1400, lambda: self._fade_label(self.name_label,    800))
         QTimer.singleShot(2600, lambda: self._fade_logo_out(1000))
         QTimer.singleShot(3600, QApplication.quit)
+
+
+class SetupFrame(QWidget):
+    """Écran de premier lancement — crée le compte administrateur."""
+    setup_complete = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(12)
+        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        center = QWidget()
+        center_layout = QVBoxLayout(center)
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        center_layout.setSpacing(10)
+
+        logo = QLabel()
+        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        _px = _logo_pixmap(70)
+        if _px:
+            logo.setPixmap(_px)
+            logo.setStyleSheet("background: transparent;")
+        else:
+            logo.setText("🛡")
+            logo.setStyleSheet(f"font-size: 48px; color: {COLORS['primary']};")
+        center_layout.addWidget(logo)
+
+        title = QLabel(APP_NAME)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("font-size: 24px; font-weight: 600;")
+        center_layout.addWidget(title)
+
+        badge = QLabel("✦  Premier lancement")
+        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge.setStyleSheet(
+            f"background: {alpha(COLORS['primary'], 36)}; color: {COLORS['primary']}; "
+            "padding: 4px 14px; border-radius: 999px; font-size: 11px; font-weight: 600;"
+        )
+        center_layout.addWidget(badge)
+
+        self.card = StyledCard()
+        self.card.setMaximumWidth(460)
+        self.card.setMinimumWidth(300)
+        self.card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        card_layout = self.card.layout()
+
+        heading = QLabel("Créer le compte administrateur")
+        heading.setObjectName("PageTitle")
+        caption = QLabel("Ce compte aura accès complet à VIGILE. Il sera le seul moyen d'accéder au système.")
+        caption.setObjectName("MutedLabel")
+        caption.setWordWrap(True)
+        card_layout.addWidget(heading)
+        card_layout.addWidget(caption)
+
+        self.username = VigileInput("Identifiant", "Nom d'utilisateur")
+        self.email    = VigileInput("Email", "admin@exemple.com")
+        self.password = VigileInput("Mot de passe", "Minimum 8 caractères", password=True)
+        self.confirm  = VigileInput("Confirmer le mot de passe", "Répétez le mot de passe", password=True)
+
+        for field in (self.username, self.email, self.password, self.confirm):
+            card_layout.addWidget(field)
+
+        self.error_label = QLabel("")
+        self.error_label.setStyleSheet(f"color: {COLORS['danger']};")
+        self.error_label.setWordWrap(True)
+        card_layout.addWidget(self.error_label)
+
+        self.submit = VigileButton("Créer l'administrateur", "primary")
+        self.submit.setMinimumHeight(42)
+        self.submit.clicked.connect(self._create_admin)
+        card_layout.addWidget(self.submit)
+
+        center_layout.addWidget(self.card)
+        layout.addWidget(center)
+
+        for field in (self.username, self.email, self.password, self.confirm):
+            field.input.returnPressed.connect(self._create_admin)
+
+    @staticmethod
+    def _do_create(username: str, email: str, password: str) -> None:
+        from config import PASSWORD_MIN_LENGTH
+        session = get_session()
+        try:
+            if session.query(User).count() > 0:
+                raise ValueError("Un compte administrateur existe déjà.")
+            if len(password) < PASSWORD_MIN_LENGTH:
+                raise ValueError(f"Le mot de passe doit contenir au moins {PASSWORD_MIN_LENGTH} caractères.")
+            if session.query(User).filter_by(username=username).first():
+                raise ValueError("Ce nom d'utilisateur est déjà pris.")
+            admin = User(username=username, email=email, role="admin", is_active=True)
+            admin.set_password(password)
+            session.add(admin)
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def _create_admin(self) -> None:
+        username = self.username.text()
+        email    = self.email.text()
+        password = self.password.text()
+        confirm  = self.confirm.text()
+
+        if not username or not email or not password:
+            self.error_label.setText("Tous les champs sont obligatoires.")
+            return
+        if "@" not in email:
+            self.error_label.setText("Adresse email invalide.")
+            return
+        if password != confirm:
+            self.error_label.setText("Les mots de passe ne correspondent pas.")
+            return
+
+        self.error_label.clear()
+        self.submit.set_loading(True)
+        self._thread = run_in_thread(
+            self, self._do_create, self._on_success, self._on_error,
+            username, email, password
+        )
+
+    def _on_success(self, _) -> None:
+        self.submit.set_loading(False)
+        self.setup_complete.emit()
+
+    def _on_error(self, message: str) -> None:
+        self.submit.set_loading(False)
+        self.error_label.setText(message)
 
 
 class LoginFrame(QWidget):
@@ -1367,15 +1585,23 @@ class VigileWindow(QMainWindow):
             self.showMaximized()
 
     def _show_login(self) -> None:
+        from database import is_first_launch
         clear_layout(self.body)
-        self.login = LoginFrame()
-        self.login.login_success.connect(self._on_login_success)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setWidget(self.login)
+
+        if is_first_launch():
+            setup = SetupFrame()
+            setup.setup_complete.connect(self._show_login)
+            scroll.setWidget(setup)
+        else:
+            self.login = LoginFrame()
+            self.login.login_success.connect(self._on_login_success)
+            scroll.setWidget(self.login)
+
         self.body.addWidget(scroll)
 
     def _on_login_success(self, user_data: dict) -> None:

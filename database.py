@@ -15,7 +15,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from config import SQLALCHEMY_DATABASE_URI, QR_CODES_DIR, ADMIN_DEFAULT, DATA_DIR
+from config import SQLALCHEMY_DATABASE_URI, QR_CODES_DIR, DATA_DIR
 from models import Base, User
 
 
@@ -50,58 +50,19 @@ def init_db() -> None:
     1. Crée le dossier de données utilisateur
     2. Crée toutes les tables définies dans models.py
     3. Crée le répertoire pour les QR codes s'il n'existe pas
-    4. Crée le compte admin par défaut si aucun utilisateur n'existe
     """
-    # Créer le dossier data racine
     os.makedirs(DATA_DIR, exist_ok=True)
-    
-    # Créer toutes les tables
     Base.metadata.create_all(bind=engine)
     print("[VIGILE] Tables de la base de données créées avec succès.")
-
-    # Créer le répertoire des QR codes
     os.makedirs(QR_CODES_DIR, exist_ok=True)
     print(f"[VIGILE] Répertoire QR codes vérifié : {QR_CODES_DIR}")
 
-    # Créer l'admin par défaut si la BD est vide
-    _creer_admin_par_defaut()
 
-
-def _creer_admin_par_defaut() -> None:
-    """
-    Crée le compte administrateur par défaut si aucun utilisateur
-    n'existe dans la base. Ceci permet un premier accès au système.
-    """
+def is_first_launch() -> bool:
+    """Retourne True si aucun utilisateur n'existe encore en base."""
     session = SessionLocal()
     try:
-        # Vérifier s'il existe déjà des utilisateurs
-        nombre_users = session.query(User).count()
-        if nombre_users > 0:
-            print("[VIGILE] Des utilisateurs existent déjà, pas de création admin.")
-            return
-
-        # Créer l'administrateur par défaut
-        admin = User(
-            username=ADMIN_DEFAULT["username"],
-            email=ADMIN_DEFAULT["email"],
-            role=ADMIN_DEFAULT["role"],
-            is_active=True
-        )
-        admin.set_password(ADMIN_DEFAULT["password"])
-
-        session.add(admin)
-        session.commit()
-        print(
-            f"[VIGILE] Compte admin créé : "
-            f"username='{ADMIN_DEFAULT['username']}', "
-            f"password='{ADMIN_DEFAULT['password']}'"
-        )
-        print("[VIGILE] ⚠ Changez ce mot de passe après la première connexion !")
-
-    except Exception as e:
-        session.rollback()
-        print(f"[VIGILE] Erreur lors de la création de l'admin : {e}")
-        raise
+        return session.query(User).count() == 0
     finally:
         session.close()
 

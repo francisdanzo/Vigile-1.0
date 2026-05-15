@@ -13,6 +13,7 @@ Routes principales de l'application web :
 import os
 import sys
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 
 from flask import (
     Flask, Blueprint, render_template, request,
@@ -26,9 +27,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import (
     SECRET_KEY, APP_NAME, APP_SLOGAN, APP_VERSION,
     TYPES_MATERIEL, ETATS_MATERIEL, EMPLACEMENTS_MATERIEL, FLASK_PORT,
-    ATTRIBUTION_ALERTE_JOURS, BASE_DIR,
+    ATTRIBUTION_ALERTE_JOURS, BASE_DIR, PASSWORD_MIN_LENGTH,
 )
-from database import get_session
+from database import get_session, is_first_launch
 from models import Materiel, Attribution, User
 from qr.generator import generer_qr_code, generer_code_vigile
 
@@ -37,6 +38,17 @@ from qr.generator import generer_qr_code, generer_code_vigile
 # =============================================================================
 
 main_bp = Blueprint("main", __name__)
+
+
+def admin_required(f):
+    """Décorateur : réserve la route aux utilisateurs avec le rôle admin."""
+    @wraps(f)
+    @login_required
+    def decorated(*args, **kwargs):
+        if not current_user.is_admin:
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated
 
 
 @main_bp.route("/")
@@ -567,7 +579,7 @@ def modifier_materiel(mat_id):
 
 
 @main_bp.route("/inventaire/supprimer/<int:mat_id>", methods=["POST"])
-@login_required
+@admin_required
 def supprimer_materiel(mat_id):
     """Suppression d'un matériel."""
     session = get_session()
@@ -629,13 +641,82 @@ def api_materiel(code_vigile):
 
 
 # =============================================================================
+# Setup initial — Premier lancement
+# =============================================================================
+
+@main_bp.route("/setup", methods=["GET", "POST"])
+def setup():
+    """
+    Configuration initiale : créer le premier compte administrateur.
+    Accessible uniquement si aucun utilisateur n'existe en base.
+    """
+    if not is_first_launch():
+        return redirect(url_for("auth.login"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email    = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        confirm  = request.form.get("confirm", "")
+
+        errors = []
+        if not username:
+            errors.append("Le nom d'utilisateur est obligatoire.")
+        if not email or "@" not in email:
+            errors.append("Une adresse email valide est requise.")
+        if len(password) < PASSWORD_MIN_LENGTH:
+            errors.append(f"Le mot de passe doit contenir au moins {PASSWORD_MIN_LENGTH} caractères.")
+        if password != confirm:
+            errors.append("Les mots de passe ne correspondent pas.")
+
+        if errors:
+            for err in errors:
+                flash(err, "error")
+            return render_template("setup.html")
+
+        session = get_session()
+        try:
+            # Vérification de sécurité : toujours s'assurer qu'on est bien le premier
+            if session.query(User).count() > 0:
+                flash("Un compte administrateur existe déjà.", "error")
+                return redirect(url_for("auth.login"))
+
+            if session.query(User).filter_by(username=username).first():
+                flash("Ce nom d'utilisateur est déjà pris.", "error")
+                return render_template("setup.html")
+
+            admin = User(
+                username=username,
+                email=email,
+                role="admin",
+                is_active=True,
+            )
+            admin.set_password(password)
+            session.add(admin)
+            session.commit()
+            flash(
+                f"Compte administrateur '{username}' créé avec succès. Connectez-vous.",
+                "success"
+            )
+            return redirect(url_for("auth.login"))
+        except Exception as exc:
+            session.rollback()
+            flash(f"Erreur lors de la création : {exc}", "error")
+            return render_template("setup.html")
+        finally:
+            session.close()
+
+    return render_template("setup.html")
+
+
+# =============================================================================
 # Factory Flask
 # =============================================================================
 
 def create_flask_app():
     """
     Factory function qui construit et configure l'application Flask complète.
-    
+
     Returns:
         Instance Flask configurée avec tous les blueprints
     """
@@ -649,6 +730,12 @@ def create_flask_app():
     # Configuration
     app.config["SECRET_KEY"] = SECRET_KEY
     app.config["SESSION_COOKIE_NAME"] = "vigile_session"
+    app.config["WTF_CSRF_TIME_LIMIT"] = 3600  # token valable 1h
+
+    # Extensions de sécurité
+    from web.extensions import csrf, limiter
+    csrf.init_app(app)
+    limiter.init_app(app)
 
     # Injecter les variables globales dans les templates
     @app.context_processor
@@ -659,6 +746,18 @@ def create_flask_app():
             "app_version": APP_VERSION,
             "now": datetime.now(),
         }
+
+    # Handler 403 — accès refusé (rôle insuffisant)
+    @app.errorhandler(403)
+    def forbidden(e):
+        flash("Accès refusé. Cette action est réservée aux administrateurs.", "error")
+        return redirect(request.referrer or url_for("main.scan")), 303
+
+    # Handler 429 — trop de tentatives
+    @app.errorhandler(429)
+    def too_many_requests(e):
+        flash("Trop de tentatives. Veuillez patienter avant de réessayer.", "error")
+        return redirect(url_for("auth.login")), 303
 
     # Enregistrer Flask-Login
     from web.auth import login_manager, auth_bp

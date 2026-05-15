@@ -10,6 +10,7 @@
 
 <section class="card">
     <form method="POST" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% if action == 'modifier' %}
         <div class="field">
             <input id="code_vigile" type="text" value="{{ materiel.code_vigile }}" placeholder=" " readonly>

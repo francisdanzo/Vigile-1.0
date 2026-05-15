@@ -11,6 +11,7 @@
 <section class="card">
     {% if action == 'attribuer' %}
     <form method="POST" action="{{ url_for('main.attribuer', code_vigile=materiel.code_vigile) }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field">
             <input id="nom" name="nom" type="text" placeholder=" " autocomplete="name" required autofocus>
             <label for="nom">Nom de la personne</label>
@@ -28,6 +29,7 @@
     <div class="form-grid">
         <p class="card-subtitle">Confirmez la récupération de cet équipement pour clôturer l’attribution active.</p>
         <form method="POST" action="{{ url_for('main.recuperer', code_vigile=materiel.code_vigile) }}" class="button-row">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-danger" type="submit">Confirmer la récupération</button>
             <a class="btn btn-secondary" href="{{ url_for('main.fiche_materiel', code_vigile=materiel.code_vigile) }}">Annuler</a>
         </form>

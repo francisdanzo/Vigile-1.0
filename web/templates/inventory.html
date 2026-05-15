@@ -74,6 +74,7 @@
             <a class="btn btn-secondary" href="{{ url_for('main.fiche_materiel', code_vigile=mat.code_vigile) }}">Voir</a>
             <a class="btn btn-secondary" href="{{ url_for('main.modifier_materiel', mat_id=mat.id) }}">Modifier</a>
             <form method="POST" action="{{ url_for('main.supprimer_materiel', mat_id=mat.id) }}" style="flex:1;" onsubmit="return confirm('Supprimer {{ mat.code_vigile }} ?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button class="btn btn-danger btn-block" type="submit">Supprimer</button>
             </form>
         </div>

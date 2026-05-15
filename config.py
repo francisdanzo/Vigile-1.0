@@ -64,18 +64,6 @@ SECRET_KEY = _load_secret_key()
 FLASK_DEBUG = False
 
 # =============================================================================
-# Compte administrateur par défaut
-# Créé automatiquement au premier lancement si la BD est vide
-# =============================================================================
-
-ADMIN_DEFAULT = {
-    "username": "admin",
-    "email": "admin@vigile.local",
-    "password": "admin123",
-    "role": "admin"
-}
-
-# =============================================================================
 # Format du code VIGILE
 # Exemple : VIG-2026-0001
 # =============================================================================
@@ -151,4 +139,4 @@ QR_BORDER = 4
 
 APP_NAME = "VIGILE"
 APP_SLOGAN = "Chaque équipement a sa sentinelle"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"

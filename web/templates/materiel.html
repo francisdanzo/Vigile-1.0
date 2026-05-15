@@ -91,6 +91,7 @@
     <div class="stack-actions">
         {% if materiel.est_attribue %}
         <form method="POST" action="{{ url_for('main.recuperer', code_vigile=materiel.code_vigile) }}" style="flex:1;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-danger btn-block" type="submit">Récupérer</button>
         </form>
         {% else %}

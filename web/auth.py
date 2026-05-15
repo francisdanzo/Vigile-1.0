@@ -17,10 +17,11 @@ from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
     login_required, current_user
 )
+from web.extensions import limiter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database import get_session
+from database import get_session, is_first_launch
 from models import User
 
 # =============================================================================
@@ -101,9 +102,12 @@ def load_user(user_id):
 # =============================================================================
 
 @auth_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     """Page de connexion web."""
-    # Si déjà connecté, rediriger vers le scanner
+    if is_first_launch():
+        return redirect(url_for("main.setup"))
+
     if current_user.is_authenticated:
         return redirect(url_for("main.scan"))
 
