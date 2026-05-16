@@ -10,12 +10,12 @@ from pathlib import Path
 project_dir = Path(SPECPATH).resolve()
 block_cipher = None
 
-# ── Données à embarquer ────────────────────────────────────────────────────────
+# ── Données à embarquer ───────────────────────────────────────────────────────
 
 datas = [
     # Templates Jinja2 — Flask les cherche à <_MEIPASS>/web/templates/
     (str(project_dir / "web" / "templates"), "web/templates"),
-    # Thèmes PyQt6 (dark + light)
+    # Thèmes PyQt6 (dark + light) — embarqués à la racine du répertoire
     (str(project_dir / "vigile_theme.qss"), "."),
     (str(project_dir / "vigile_theme_light.qss"), "."),
     # Logo (splash, login, sidebar, favicon web)
@@ -31,7 +31,7 @@ cloudflared_exe = project_dir / "tunnel" / "cloudflared.exe"
 if cloudflared_exe.exists():
     datas.append((str(cloudflared_exe), "tunnel"))
 
-# ── Analyse ────────────────────────────────────────────────────────────────────
+# ── Analyse ───────────────────────────────────────────────────────────
 
 a = Analysis(
     ["app.py"],
