@@ -88,12 +88,14 @@ jobs:
 
       - name: Vérifier les thèmes embarqués
         run: |
-          foreach ($qss in @("dist\Vigile\vigile_theme.qss", "dist\Vigile\vigile_theme_light.qss")) {
-            if (!(Test-Path $qss)) {
-              Write-Error "$qss absent du build — vérifier vigile.spec"
+          # PyInstaller 6.x place les datas dans dist\Vigile\_internal\ (pas à la racine)
+          foreach ($name in @("vigile_theme.qss", "vigile_theme_light.qss")) {
+            $found = Get-ChildItem -Recurse "dist\Vigile" -Filter $name | Select-Object -First 1
+            if (-not $found) {
+              Write-Error "$name absent du build — vérifier vigile.spec"
               exit 1
             }
-            Write-Host "$qss embarqué OK"
+            Write-Host "$name embarqué OK : $($found.FullName)"
           }
         shell: pwsh
 
