@@ -1,63 +1,164 @@
 {% extends "base.html" %}
 
-{% block title %}Historique - {{ app_name }}{% endblock %}
+{% block title %}Historique — {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+    .history-entry {
+        display: grid;
+        gap: 6px;
+    }
+
+    .history-entry-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .history-code {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+    }
+
+    .history-person {
+        color: var(--txt-1);
+        font-size: 13px;
+        font-weight: 500;
+        margin-top: 2px;
+    }
+
+    .history-dates {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--txt-2);
+        font-size: 12px;
+        flex-wrap: wrap;
+    }
+
+    .history-by {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--txt-3);
+        font-size: 11.5px;
+    }
+
+    .history-notes {
+        color: var(--txt-3);
+        font-size: 12px;
+        font-style: italic;
+        padding: 6px 10px;
+        border-radius: var(--r-sm);
+        background: var(--glass);
+        border: 0.5px solid var(--glass-border);
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<section>
+<section style="margin-bottom:24px;">
     <h1 class="page-title">Historique global</h1>
-    <p class="page-subtitle">Traçabilité complète des attributions, retours et opérateurs.</p>
+    <p class="page-subtitle">Traçabilité complète des attributions et retours.</p>
 </section>
 
-<section class="card">
+<section class="card" style="margin-bottom:16px;">
     <form method="GET" action="{{ url_for('main.historique') }}" class="form-grid">
         <div class="field">
-            <input id="q" name="q" type="text" placeholder=" " value="{{ q }}">
-            <label for="q">Nom ou code VIGILE</label>
+            <input id="q" name="q" type="text" placeholder=" " value="{{ q }}" autocomplete="off">
+            <label for="q">Rechercher par nom ou code VIGILE</label>
         </div>
-        <button class="btn btn-primary btn-block" type="submit">Rechercher</button>
+        <div class="button-row">
+            <button class="btn btn-primary" type="submit">
+                <i data-lucide="search"></i>
+                Rechercher
+            </button>
+            {% if q %}
+            <a class="btn btn-secondary" href="{{ url_for('main.historique') }}">
+                <i data-lucide="x"></i>
+                Effacer
+            </a>
+            {% endif %}
+        </div>
     </form>
 </section>
 
-<section class="history-list">
+<div class="history-list">
     {% for attr in attributions %}
     <article class="history-item">
-        <div class="history-item-header">
-            <div>
-                <div class="history-strong">{{ attr.materiel.code_vigile if attr.materiel else '—' }}</div>
-                <div class="history-meta">{{ attr.materiel.type | capitalize if attr.materiel else 'Type inconnu' }}</div>
+        <div class="history-entry">
+            <div class="history-entry-top">
+                <div>
+                    <a class="history-code code-mono"
+                       href="{{ url_for('main.fiche_materiel', code_vigile=attr.materiel.code_vigile) if attr.materiel else '#' }}"
+                       style="color:var(--accent);">
+                        {{ attr.materiel.code_vigile if attr.materiel else '—' }}
+                    </a>
+                    <div class="history-person">{{ attr.attribue_a }}</div>
+                </div>
+                <span class="badge {% if attr.is_active %}badge-active{% else %}badge-neutral{% endif %}">
+                    {% if attr.is_active %}En prêt{% else %}Retourné{% endif %}
+                </span>
             </div>
-            <span class="badge {% if attr.is_active %}badge-active{% else %}badge-neutral{% endif %}">
-                {% if attr.is_active %}En prêt{% else %}Retourné{% endif %}
-            </span>
+
+            <div class="history-dates">
+                <i data-lucide="arrow-right-from-line" style="width:11px;height:11px;flex-shrink:0;"></i>
+                {{ attr.date_attribution.strftime('%d/%m/%Y %H:%M') }}
+                {% if attr.date_retour %}
+                <i data-lucide="arrow-left-to-line" style="width:11px;height:11px;flex-shrink:0;color:var(--success);"></i>
+                <span style="color:var(--success);">{{ attr.date_retour.strftime('%d/%m/%Y %H:%M') }}</span>
+                {% endif %}
+            </div>
+
+            <div class="history-by">
+                <i data-lucide="shield-user" style="width:10px;height:10px;"></i>
+                {{ attr.attribueur.username if attr.attribueur else 'Système' }}
+                <span style="opacity:0.5;">·</span>
+                {{ attr.materiel.type | capitalize if attr.materiel else '' }}
+            </div>
+
+            {% if attr.notes %}
+            <div class="history-notes">{{ attr.notes }}</div>
+            {% endif %}
         </div>
-        <div class="history-meta">Attribué à {{ attr.attribue_a }}</div>
-        <div class="history-meta">Le {{ attr.date_attribution.strftime('%d/%m/%Y %H:%M') }}</div>
-        {% if attr.date_retour %}
-        <div class="history-meta">Retour le {{ attr.date_retour.strftime('%d/%m/%Y %H:%M') }}</div>
-        {% endif %}
-        <div class="history-meta">Par {{ attr.attribueur.username if attr.attribueur else 'Système' }}</div>
-        {% if attr.notes %}
-        <div class="history-meta">{{ attr.notes }}</div>
-        {% endif %}
     </article>
     {% else %}
-    <section class="card">
-        <div class="empty-state">Aucun historique trouvé.</div>
-    </section>
+    <div class="card">
+        <div class="empty-state">
+            <i data-lucide="clock" style="width:36px;height:36px;opacity:0.3;"></i>
+            <span>Aucun historique trouvé{% if q %} pour « {{ q }} »{% endif %}.</span>
+            {% if q %}
+            <a class="btn btn-secondary" href="{{ url_for('main.historique') }}">
+                <i data-lucide="refresh-cw"></i>
+                Effacer la recherche
+            </a>
+            {% endif %}
+        </div>
+    </div>
     {% endfor %}
-</section>
+</div>
 
 {% if total_pages > 1 %}
-<section class="card">
-    <div class="button-row">
+<div class="card" style="margin-top:16px;">
+    <div class="pagination">
         {% if page > 1 %}
-        <a class="btn btn-secondary" href="{{ url_for('main.historique', page=page-1, q=q) }}">Précédent</a>
+        <a class="btn btn-secondary" href="{{ url_for('main.historique', page=page-1, q=q) }}">
+            <i data-lucide="chevron-left"></i>
+            Précédent
+        </a>
         {% endif %}
-        <span class="badge badge-neutral">Page {{ page }} / {{ total_pages }}</span>
+        <span class="badge badge-neutral" style="padding:5px 14px;font-size:12px;">
+            {{ page }} / {{ total_pages }}
+        </span>
         {% if page < total_pages %}
-        <a class="btn btn-secondary" href="{{ url_for('main.historique', page=page+1, q=q) }}">Suivant</a>
+        <a class="btn btn-secondary" href="{{ url_for('main.historique', page=page+1, q=q) }}">
+            Suivant
+            <i data-lucide="chevron-right"></i>
+        </a>
         {% endif %}
     </div>
-</section>
+</div>
 {% endif %}
 {% endblock %}

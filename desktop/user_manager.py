@@ -102,14 +102,17 @@ class UserManagerFrame(QWidget):
         run_in_thread(self, self._fetch, self._bind)
 
     def _bind(self, rows: list[dict]) -> None:
+        self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
         if not rows:
             self.table.empty("Aucun utilisateur")
+            self.table.setSortingEnabled(True)
             return
         self.table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
             for col, key in enumerate(("id", "username", "email", "role", "status", "created_at")):
                 self.table.setItem(row_index, col, QTableWidgetItem(str(row[key])))
+        self.table.setSortingEnabled(True)
 
     def selected_user_id(self) -> int | None:
         selection = self.table.selectionModel().selectedRows()

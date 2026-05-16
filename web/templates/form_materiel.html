@@ -1,74 +1,143 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'Ajouter' if action == 'ajouter' else 'Modifier' }} un matériel - {{ app_name }}{% endblock %}
+{% block title %}{{ 'Ajouter' if action == 'ajouter' else 'Modifier' }} un matériel — {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+    .form-page { max-width: 600px; }
+
+    .form-section-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--txt-3);
+        padding-bottom: 4px;
+        border-bottom: 0.5px solid var(--border);
+        margin-bottom: -2px;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<section>
-    <h1 class="page-title">{{ 'Ajouter un matériel' if action == 'ajouter' else 'Modifier le matériel' }}</h1>
-    <p class="page-subtitle">Formulaire mobile-first compatible avec les routes Flask existantes.</p>
-</section>
+<div class="form-page">
+    <section style="margin-bottom:24px;">
+        <h1 class="page-title">
+            {{ 'Ajouter un matériel' if action == 'ajouter' else 'Modifier le matériel' }}
+        </h1>
+        <p class="page-subtitle">
+            {% if action == 'ajouter' %}
+                Un code VIGILE et un QR code seront générés automatiquement.
+            {% else %}
+                Mettez à jour les informations de cet équipement.
+            {% endif %}
+        </p>
+    </section>
 
-<section class="card">
-    <form method="POST" class="form-grid">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        {% if action == 'modifier' %}
-        <div class="field">
-            <input id="code_vigile" type="text" value="{{ materiel.code_vigile }}" placeholder=" " readonly>
-            <label for="code_vigile">Code VIGILE</label>
-        </div>
-        {% endif %}
-        <div class="field">
-            <select id="type" name="type" required>
-                {% for item in types %}
-                <option value="{{ item }}" {% if (materiel and materiel.type == item) or (not materiel and loop.first) %}selected{% endif %}>{{ item | capitalize }}</option>
-                {% endfor %}
-            </select>
-            <label for="type">Type</label>
-        </div>
-        <div class="panel-grid two-up">
-            <div class="field">
-                <input id="marque" name="marque" type="text" placeholder=" " value="{{ materiel.marque if materiel else '' }}">
-                <label for="marque">Marque</label>
+    <div class="card">
+        <form method="POST" class="form-grid" style="gap:18px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            {% if action == 'modifier' %}
+            <div>
+                <span class="form-section-label">Identifiant</span>
+                <div style="margin-top:10px;" class="field">
+                    <input id="code_vigile" type="text" value="{{ materiel.code_vigile }}"
+                           placeholder=" " readonly
+                           style="font-family:monospace;color:var(--txt-2);cursor:not-allowed;opacity:0.7;">
+                    <label for="code_vigile">Code VIGILE</label>
+                </div>
             </div>
-            <div class="field">
-                <input id="modele" name="modele" type="text" placeholder=" " value="{{ materiel.modele if materiel else '' }}">
-                <label for="modele">Modèle</label>
+            {% endif %}
+
+            <div>
+                <span class="form-section-label">Classification</span>
+                <div style="margin-top:10px;" class="form-grid">
+                    <div class="field">
+                        <select id="type" name="type" required>
+                            {% for item in types %}
+                            <option value="{{ item }}"
+                                {% if (materiel and materiel.type == item) or (not materiel and loop.first) %}selected{% endif %}>
+                                {{ item | capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <label for="type">Type d'équipement</label>
+                    </div>
+                    <div class="panel-grid two-up">
+                        <div class="field">
+                            <input id="marque" name="marque" type="text" placeholder=" "
+                                   value="{{ materiel.marque if materiel else '' }}">
+                            <label for="marque">Marque</label>
+                        </div>
+                        <div class="field">
+                            <input id="modele" name="modele" type="text" placeholder=" "
+                                   value="{{ materiel.modele if materiel else '' }}">
+                            <label for="modele">Modèle</label>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <input id="numero_serie" name="numero_serie" type="text" placeholder=" "
+                               value="{{ materiel.numero_serie if materiel else '' }}"
+                               style="font-family:monospace;" spellcheck="false">
+                        <label for="numero_serie">Numéro de série</label>
+                    </div>
+                </div>
             </div>
-        </div>
-        <div class="field">
-            <input id="numero_serie" name="numero_serie" type="text" placeholder=" " value="{{ materiel.numero_serie if materiel else '' }}">
-            <label for="numero_serie">Numéro de série</label>
-        </div>
-        <div class="panel-grid two-up">
-            <div class="field">
-                <select id="etat" name="etat" required>
-                    {% for item in etats %}
-                    <option value="{{ item }}" {% if (materiel and materiel.etat == item) or (not materiel and item == 'neuf') %}selected{% endif %}>{{ item | capitalize }}</option>
-                    {% endfor %}
-                </select>
-                <label for="etat">État</label>
+
+            <div>
+                <span class="form-section-label">État & emplacement</span>
+                <div style="margin-top:10px;" class="panel-grid two-up">
+                    <div class="field">
+                        <select id="etat" name="etat" required>
+                            {% for item in etats %}
+                            <option value="{{ item }}"
+                                {% if (materiel and materiel.etat == item) or (not materiel and item == 'neuf') %}selected{% endif %}>
+                                {{ item | capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <label for="etat">État</label>
+                    </div>
+                    <div class="field">
+                        <select id="emplacement" name="emplacement" required>
+                            {% for item in emplacements %}
+                            <option value="{{ item }}"
+                                {% if (materiel and materiel.emplacement == item) or (not materiel and item == 'réserve') %}selected{% endif %}>
+                                {{ item | replace('_', ' ') | capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <label for="emplacement">Emplacement</label>
+                    </div>
+                </div>
             </div>
-            <div class="field">
-                <select id="emplacement" name="emplacement" required>
-                    {% for item in emplacements %}
-                    <option value="{{ item }}" {% if (materiel and materiel.emplacement == item) or (not materiel and item == 'réserve') %}selected{% endif %}>{{ item | replace('_', ' ') | capitalize }}</option>
-                    {% endfor %}
-                </select>
-                <label for="emplacement">Emplacement</label>
+
+            <div>
+                <span class="form-section-label">Informations complémentaires</span>
+                <div style="margin-top:10px;" class="form-grid">
+                    <div class="field">
+                        <input id="date_acquisition" name="date_acquisition" type="date" placeholder=" "
+                               value="{{ materiel.date_acquisition.strftime('%Y-%m-%d') if materiel and materiel.date_acquisition else '' }}">
+                        <label for="date_acquisition">Date d'acquisition</label>
+                    </div>
+                    <div class="field">
+                        <textarea id="notes" name="notes" placeholder=" ">{{ materiel.notes if materiel else '' }}</textarea>
+                        <label for="notes">Notes</label>
+                    </div>
+                </div>
             </div>
-        </div>
-        <div class="field">
-            <input id="date_acquisition" name="date_acquisition" type="date" placeholder=" " value="{{ materiel.date_acquisition.strftime('%Y-%m-%d') if materiel and materiel.date_acquisition else '' }}">
-            <label for="date_acquisition">Date d'acquisition</label>
-        </div>
-        <div class="field">
-            <textarea id="notes" name="notes" placeholder=" ">{{ materiel.notes if materiel else '' }}</textarea>
-            <label for="notes">Notes</label>
-        </div>
-        <div class="button-row">
-            <button class="btn btn-primary" type="submit">{{ 'Sauvegarder' if action == 'ajouter' else 'Mettre à jour' }}</button>
-            <a class="btn btn-secondary" href="{{ url_for('main.inventaire') }}">Annuler</a>
-        </div>
-    </form>
-</section>
+
+            <div class="button-row" style="padding-top:4px;">
+                <button class="btn btn-primary" type="submit" style="flex:1;">
+                    <i data-lucide="{% if action == 'ajouter' %}plus-circle{% else %}save{% endif %}"></i>
+                    {{ 'Créer le matériel' if action == 'ajouter' else 'Enregistrer les modifications' }}
+                </button>
+                <a class="btn btn-secondary" href="{{ url_for('main.inventaire') }}">
+                    Annuler
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}

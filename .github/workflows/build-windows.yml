@@ -3,6 +3,7 @@ name: Build Windows Installer
 on:
   push:
     branches:
+      - main
       - before
     tags:
       - 'v*'
@@ -33,7 +34,8 @@ jobs:
           python -c "from PyQt6.QtWidgets import QApplication; print('QtWidgets OK')"
           python -c "import flask; print('Flask OK:', flask.__version__)"
           python -c "import sqlalchemy; print('SQLAlchemy OK:', sqlalchemy.__version__)"
-          pip list | findstr -i "pyqt pyinstaller"
+          python -c "import flask_limiter; print('Flask-Limiter OK:', flask_limiter.__version__)"
+          pip list | findstr -i "pyqt pyinstaller flask"
 
       - name: Télécharger cloudflared Windows
         run: |
@@ -42,6 +44,22 @@ jobs:
           Invoke-WebRequest -Uri $url -OutFile "tunnel\cloudflared.exe"
           $sizeMB = [math]::Round((Get-Item "tunnel\cloudflared.exe").Length / 1MB, 1)
           Write-Host "cloudflared.exe téléchargé : $sizeMB MB"
+        shell: pwsh
+
+      - name: Vérifier les assets (thèmes QSS + logo)
+        run: |
+          foreach ($f in @("vigile_theme.qss", "vigile_theme_light.qss")) {
+            if (!(Test-Path $f)) {
+              Write-Error "$f introuvable — requis par le build"
+              exit 1
+            }
+            Write-Host "$f OK"
+          }
+          if (!(Test-Path "assets\logo\vigile.ico")) {
+            Write-Error "assets\logo\vigile.ico introuvable"
+            exit 1
+          }
+          Write-Host "assets\logo\vigile.ico OK"
         shell: pwsh
 
       - name: Build PyInstaller
@@ -68,13 +86,23 @@ jobs:
           }
         shell: pwsh
 
+      - name: Vérifier les thèmes embarqués
+        run: |
+          foreach ($qss in @("dist\Vigile\vigile_theme.qss", "dist\Vigile\vigile_theme_light.qss")) {
+            if (!(Test-Path $qss)) {
+              Write-Error "$qss absent du build — vérifier vigile.spec"
+              exit 1
+            }
+            Write-Host "$qss embarqué OK"
+          }
+        shell: pwsh
+
       - name: Installer Inno Setup
         run: choco install innosetup --yes --no-progress
         shell: pwsh
 
       - name: Créer l'installateur
         run: |
-          # Chercher ISCC.exe (choco l'ajoute au PATH mais le shell doit être rafraîchi)
           $iscc = Get-ChildItem "C:\Program Files (x86)" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
                   Select-Object -First 1 -ExpandProperty FullName
           if (-not $iscc) {
@@ -88,18 +116,19 @@ jobs:
 
       - name: Vérifier l'installateur
         run: |
-          if (!(Test-Path "installer_output\VigileSetup-1.0.0.exe")) {
-            Write-Error "Installateur introuvable dans installer_output\"
+          $installer = Get-ChildItem "installer_output\*.exe" | Select-Object -First 1
+          if (-not $installer) {
+            Write-Error "Aucun installateur .exe trouvé dans installer_output\"
             exit 1
           }
-          $sizeMB = [math]::Round((Get-Item "installer_output\VigileSetup-1.0.0.exe").Length / 1MB, 1)
-          Write-Host "Installateur OK : VigileSetup-1.0.0.exe ($sizeMB MB)"
+          $sizeMB = [math]::Round($installer.Length / 1MB, 1)
+          Write-Host "Installateur OK : $($installer.Name) ($sizeMB MB)"
         shell: pwsh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: VigileSetup-Windows-${{ github.sha }}
-          path: installer_output\VigileSetup-1.0.0.exe
+          path: installer_output\*.exe
           retention-days: 30
           if-no-files-found: error

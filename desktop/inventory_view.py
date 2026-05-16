@@ -46,12 +46,16 @@ class InventoryFrame(QWidget):
         self.current_user = current_user
         self.rows: list[dict] = []
         self.current_page = 1
-        self.per_page = 50
+        self.per_page = 10
         self.total_items = 0
+        self._refreshing = False
         self.search_timer = QTimer(self)
         self.search_timer.setSingleShot(True)
         self.search_timer.setInterval(300)
         self.search_timer.timeout.connect(self.refresh)
+        self._auto_timer = QTimer(self)
+        self._auto_timer.setInterval(30000)
+        self._auto_timer.timeout.connect(self.refresh)
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(18)
@@ -78,17 +82,22 @@ class InventoryFrame(QWidget):
         self.search = QLineEdit()
         self.search.setPlaceholderText("Recherche par code, marque, modèle, numéro de série")
         self.search.textChanged.connect(self._reset_and_refresh)
+        self.search.setMinimumWidth(400)
         filters_layout.addWidget(self.search)
         row = QHBoxLayout()
         self.type_combo = QComboBox()
+        self.type_combo.setMinimumWidth(150)
         self.type_combo.addItems(["Tous"] + TYPES_MATERIEL)
         self.etat_combo = QComboBox()
+        self.etat_combo.setMinimumWidth(150)
         self.etat_combo.addItems(["Tous"] + ETATS_MATERIEL)
         self.emplacement_combo = QComboBox()
+        self.emplacement_combo.setMinimumWidth(150)
         self.emplacement_combo.addItems(["Tous"] + EMPLACEMENTS_MATERIEL)
         for combo in (self.type_combo, self.etat_combo, self.emplacement_combo):
             combo.currentTextChanged.connect(self._reset_and_refresh)
             row.addWidget(combo)
+        row.addStretch(1)
         filters_layout.addLayout(row)
         chips = QHBoxLayout()
         self.type_chip = CounterChip("Types")
@@ -102,26 +111,26 @@ class InventoryFrame(QWidget):
 
         # ── Table ─────────────────────────────────────────────────────────────
         table_card = StyledCard()
-        self.table = VigileTable(["Code", "Type", "Marque / Modèle", "État", "Emplacement", "Attribué à", "Actions"])
+        self.table = VigileTable(["Code VIGILE", "Type", "Marque / Modèle", "État", "Lieu", "Attribué à", "Actions"])
         self.table.setColumnWidth(0, 140)
-        self.table.setColumnWidth(1, 90)
-        self.table.setColumnWidth(2, 180)
-        self.table.setColumnWidth(3, 80)
-        self.table.setColumnWidth(4, 90)
-        self.table.setColumnWidth(5, 110)
-        self.table.setColumnWidth(6, 370)
-        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(1, 100)
+        self.table.setColumnWidth(2, 220)
+        self.table.setColumnWidth(3, 100)
+        self.table.setColumnWidth(4, 120)
+        self.table.setColumnWidth(5, 140)
+        self.table.verticalHeader().setDefaultSectionSize(48)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
         table_card.layout().addWidget(self.table)
 
         # ── Pagination ────────────────────────────────────────────────────────
         pag = QHBoxLayout()
-        self.btn_prev = VigileButton("‹  Précédent", "secondary")
+        self.btn_prev = VigileButton("‹  Précédent", "secondary", padding="6px 14px")
         self.btn_prev.setFixedHeight(32)
         self.btn_prev.clicked.connect(self._prev_page)
         self.page_label = QLabel("Page 1 / 1")
         self.page_label.setObjectName("MutedLabel")
         self.page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.btn_next = VigileButton("Suivant  ›", "secondary")
+        self.btn_next = VigileButton("Suivant  ›", "secondary", padding="6px 14px")
         self.btn_next.setFixedHeight(32)
         self.btn_next.clicked.connect(self._next_page)
         pag.addStretch(1)
@@ -177,6 +186,9 @@ class InventoryFrame(QWidget):
             session.close()
 
     def refresh(self) -> None:
+        if self._refreshing:
+            return
+        self._refreshing = True
         run_in_thread(
             self,
             self._fetch,
@@ -190,11 +202,20 @@ class InventoryFrame(QWidget):
             self.per_page,
         )
 
+    def showEvent(self, event) -> None:
+        self._auto_timer.start()
+        super().showEvent(event)
+
+    def hideEvent(self, event) -> None:
+        self._auto_timer.stop()
+        super().hideEvent(event)
+
     def _reset_and_refresh(self) -> None:
         self.current_page = 1
         self.search_timer.start()
 
     def _bind(self, payload: dict) -> None:
+        self._refreshing = False
         self.rows = payload["rows"]
         self.total_items = payload["total"]
         total_pages = max(1, math.ceil(self.total_items / self.per_page))
@@ -231,11 +252,8 @@ class InventoryFrame(QWidget):
                 ("Récupérer",  "secondary", partial(self.recover,  row["id"])),
                 ("Supprimer",  "danger",    partial(self.delete,   row["id"])),
             ):
-                button = VigileButton(label, variant)
+                button = VigileButton(label, variant, padding="4px 10px")
                 button.setFixedHeight(28)
-                button.setStyleSheet(
-                    button.styleSheet().replace("padding: 10px 18px", "padding: 4px 10px")
-                )
                 button.clicked.connect(callback)
                 actions_layout.addWidget(button)
             self.table.setCellWidget(row_index, 6, actions)

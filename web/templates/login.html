@@ -1,86 +1,125 @@
 {% extends "base.html" %}
 
-{% block title %}Connexion - {{ app_name }}{% endblock %}
+{% block title %}Connexion — {{ app_name }}{% endblock %}
 {% block screen_class %}login-screen{% endblock %}
 
 {% block head %}
 <style>
-    .login-outer { min-height: calc(100vh - 36px); place-content: center; }
-    [data-theme="dark"]  .login-outer { background: linear-gradient(180deg, rgba(17,17,24,0.9), rgba(13,13,20,0.95)); }
-    [data-theme="light"] .login-outer { background: linear-gradient(180deg, rgba(242,242,248,0.92), rgba(234,234,242,0.96)); }
-    .login-inner { min-height: 400px; }
-    [data-theme="dark"]  .login-inner { background: rgba(22,22,31,0.82); }
-    [data-theme="light"] .login-inner { background: rgba(255,255,255,0.92); }
-    .login-theme-toggle {
-        position: fixed;
-        top: 16px;
-        right: 18px;
-        z-index: 50;
-        appearance: none;
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-pill);
-        background: var(--theme-toggle-bg);
-        color: var(--text-secondary);
-        width: 38px;
-        height: 38px;
+    .login-logo-wrap {
+        width: 76px; height: 76px;
+        border-radius: 24px;
+        background: var(--glass-md);
+        border: 0.5px solid var(--glass-border);
+        box-shadow:
+            inset 0 1px 0 var(--glass-shine),
+            0 16px 40px rgba(10,132,255,0.22),
+            0 4px 12px rgba(0,0,0,0.3);
         display: grid;
         place-items: center;
-        cursor: pointer;
-        font-size: 17px;
-        transition: border-color 0.18s ease, transform 0.12s ease;
+        margin: 0 auto;
+        position: relative;
+        overflow: hidden;
     }
-    .login-theme-toggle:hover { border-color: var(--accent-primary); }
-    .login-theme-toggle:active { transform: scale(0.88); }
+
+    .login-logo-wrap::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 50%;
+        background: radial-gradient(ellipse 100% 100% at 50% -10%, rgba(255,255,255,0.14) 0%, transparent 80%);
+    }
+
+    .login-logo-wrap img {
+        width: 46px; height: 46px;
+        object-fit: contain;
+        border-radius: 8px;
+        position: relative;
+    }
+
+    .login-hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        text-align: center;
+    }
+
+    .login-form-card {
+        background: var(--glass);
+        border: 0.5px solid var(--glass-border);
+        border-radius: var(--r-xl);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        box-shadow: var(--shadow-glass);
+        padding: 26px;
+        display: grid;
+        gap: 18px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .login-form-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 50%;
+        background: radial-gradient(ellipse 120% 80% at 50% -20%, var(--glass-caustic) 0%, transparent 72%);
+        pointer-events: none;
+    }
+
+    .login-form-card > * { position: relative; }
+
+    .login-version {
+        text-align: center;
+        color: var(--txt-3);
+        font-size: 11px;
+    }
 </style>
-<script>
-    (function () {
-        function icon(theme) { return theme === 'dark' ? '☀' : '🌙'; }
-        document.addEventListener('DOMContentLoaded', function () {
-            var btn = document.getElementById('login-theme-toggle');
-            if (!btn) return;
-            btn.querySelector('.theme-icon').textContent = icon(document.documentElement.getAttribute('data-theme') || 'dark');
-            btn.addEventListener('click', function () {
-                var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-                document.documentElement.setAttribute('data-theme', next);
-                localStorage.setItem('vigile-theme', next);
-                btn.querySelector('.theme-icon').textContent = icon(next);
-            });
-        });
-    })();
-</script>
 {% endblock %}
 
 {% block content %}
-<button class="login-theme-toggle" id="login-theme-toggle" title="Thème clair / sombre" aria-label="Basculer le thème">
-    <span class="theme-icon">☀</span>
+<button class="icon-btn login-theme-toggle" id="login-theme-toggle" aria-label="Basculer le thème">
+    <span class="ti-dark"><i data-lucide="sun"></i></span>
+    <span class="ti-light"><i data-lucide="moon"></i></span>
 </button>
-<section class="card login-outer">
-    <div style="display:grid; gap:18px; text-align:center;">
-        <div style="font-size:72px; line-height:1; filter: drop-shadow(0 18px 28px rgba(124,107,255,0.28));">🛡</div>
+
+<div class="login-outer">
+    <div class="login-hero">
+        <div class="login-logo-wrap">
+            <img src="{{ url_for('main.serve_logo') }}" alt="{{ app_name }}">
+        </div>
         <div>
-            <h1 class="page-title" style="margin:0;">{{ app_name }}</h1>
-            <p class="page-subtitle" style="color: var(--gold); font-style: italic;">{{ app_slogan }}</p>
+            <h1 class="page-title" style="font-size:30px;">{{ app_name }}</h1>
+            <p class="page-subtitle" style="color:var(--gold);font-style:italic;margin-top:5px;font-size:13px;">{{ app_slogan }}</p>
         </div>
     </div>
-    <div class="card login-inner">
+
+    <div class="login-form-card">
         <div>
-            <h2 class="card-title">Connexion sécurisée</h2>
-            <p class="card-subtitle">Accès mobile et terrain au parc matériel.</p>
+            <h2 class="card-title" style="font-size:17px;">Connexion</h2>
+            <p class="card-subtitle">Accès sécurisé au parc matériel.</p>
         </div>
+
         <form method="POST" action="{{ url_for('auth.login') }}" class="form-grid">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="field">
-                <input id="username" name="username" type="text" placeholder=" " autocomplete="username" required autofocus>
+                <input id="username" name="username" type="text" placeholder=" "
+                       autocomplete="username" required autofocus>
                 <label for="username">Nom d'utilisateur</label>
             </div>
             <div class="field">
-                <input id="password" name="password" type="password" placeholder=" " autocomplete="current-password" required>
+                <input id="password" name="password" type="password" placeholder=" "
+                       autocomplete="current-password" required>
                 <label for="password">Mot de passe</label>
             </div>
-            <p class="form-help">Les opérations critiques sont traçées automatiquement avec votre session.</p>
-            <button class="btn btn-primary btn-block" type="submit">Se connecter</button>
+            <p class="form-help" style="color:var(--txt-3);">Les opérations sont tracées automatiquement.</p>
+            <button class="btn btn-primary btn-block" type="submit">
+                <i data-lucide="log-in"></i>
+                Se connecter
+            </button>
         </form>
-        <div style="text-align:center; color:var(--text-muted); font-size:12px;">Version {{ app_version }}</div>
     </div>
-</section>
+
+    <div class="login-version">Version {{ app_version }}</div>
+</div>
 {% endblock %}

@@ -1,40 +1,97 @@
 {% extends "base.html" %}
 
-{% block title %}{{ materiel.code_vigile }} - {{ app_name }}{% endblock %}
+{% block title %}{{ materiel.code_vigile }} — {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+    .hero-code {
+        font-size: 24px;
+        letter-spacing: -0.02em;
+    }
+
+    .hero-type {
+        color: var(--txt-2);
+        font-size: 14px;
+        margin-top: 4px;
+    }
+
+    .hero-badges {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+    }
+
+    .attribution-active-card {
+        border-color: rgba(94,92,230,0.28) !important;
+    }
+
+    .attribution-person {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+    }
+
+    .attribution-since {
+        color: var(--txt-2);
+        font-size: 12px;
+        margin-top: 3px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<section class="material-hero {{ materiel.etat }}">
-    <div style="display:grid; gap:14px;">
-        <div class="code-mono">{{ materiel.code_vigile }}</div>
-        <p class="page-subtitle" style="margin:0;">{{ materiel.type | capitalize }} · {{ materiel.marque }} {{ materiel.modele }}</p>
-        <div class="button-row">
-            <span class="badge badge-{{ materiel.etat }}">{{ materiel.etat | replace('_', ' ') | capitalize }}</span>
+<!-- Hero -->
+<section class="material-hero {{ materiel.etat }}" style="margin-bottom:14px;">
+    <div>
+        <div class="hero-code code-mono">{{ materiel.code_vigile }}</div>
+        <div class="hero-type">
+            {{ materiel.type | capitalize }}
+            {% if materiel.marque != '—' %} · {{ materiel.marque }}{% endif %}
+            {% if materiel.modele != '—' %} {{ materiel.modele }}{% endif %}
+        </div>
+        <div class="hero-badges">
+            <span class="badge badge-{{ materiel.etat }}">{{ materiel.etat | replace('_',' ') | capitalize }}</span>
             {% if materiel.est_attribue %}
-            <span class="badge badge-active">Attribué</span>
+            <span class="badge badge-active">
+                <i data-lucide="user-check" style="width:11px;height:11px;"></i>
+                Attribué
+            </span>
             {% else %}
-            <span class="badge badge-neutral">Disponible</span>
+            <span class="badge badge-neuf">
+                <i data-lucide="circle-check" style="width:11px;height:11px;"></i>
+                Disponible
+            </span>
             {% endif %}
         </div>
     </div>
 </section>
 
-<section class="card">
+<!-- Infos -->
+<section class="card" style="margin-bottom:14px;">
+    <h2 class="card-title" style="display:flex;align-items:center;gap:8px;">
+        <i data-lucide="info" style="width:15px;height:15px;color:var(--accent);"></i>
+        Informations
+    </h2>
     <div class="meta-grid">
         <div class="meta-item">
             <span class="meta-label">Type</span>
             <span class="meta-value">{{ materiel.type | capitalize }}</span>
         </div>
         <div class="meta-item">
-            <span class="meta-label">Marque / modèle</span>
+            <span class="meta-label">Marque · Modèle</span>
             <span class="meta-value">{{ materiel.marque }} {{ materiel.modele }}</span>
         </div>
         <div class="meta-item">
-            <span class="meta-label">Numéro de série</span>
-            <span class="meta-value">{{ materiel.numero_serie }}</span>
+            <span class="meta-label">N° de série</span>
+            <span class="meta-value" style="font-family:monospace;font-size:12px;">{{ materiel.numero_serie }}</span>
         </div>
         <div class="meta-item">
             <span class="meta-label">Emplacement</span>
-            <span class="meta-value">{{ materiel.emplacement | replace('_', ' ') | capitalize }}</span>
+            <span class="meta-value">{{ materiel.emplacement | replace('_',' ') | capitalize }}</span>
         </div>
         <div class="meta-item">
             <span class="meta-label">Acquisition</span>
@@ -48,38 +105,54 @@
 </section>
 
 {% if materiel.est_attribue %}
-<section class="card">
-    <h2 class="card-title">Attribution active</h2>
-    <div class="history-item">
-        <div class="history-item-header">
-            <div>
-                <div class="history-strong">{{ materiel.attribue_a }}</div>
-                <div class="history-meta">Depuis le {{ materiel.date_attribution }}</div>
-            </div>
-            <span class="badge badge-active">En cours</span>
+<!-- Attribution active -->
+<section class="card attribution-active-card" style="margin-bottom:14px;">
+    <h2 class="card-title" style="display:flex;align-items:center;gap:8px;">
+        <i data-lucide="user-check" style="width:15px;height:15px;color:var(--b-active-tx);"></i>
+        Attribution active
+    </h2>
+    <div class="meta-item">
+        <div class="attribution-person">{{ materiel.attribue_a }}</div>
+        <div class="attribution-since">
+            <i data-lucide="calendar" style="width:11px;height:11px;"></i>
+            Depuis le {{ materiel.date_attribution }}
         </div>
     </div>
 </section>
 {% endif %}
 
 {% if historique %}
-<section class="card">
-    <h2 class="card-title">Historique</h2>
+<!-- Historique -->
+<section class="card" style="margin-bottom:14px;">
+    <h2 class="card-title" style="display:flex;align-items:center;gap:8px;">
+        <i data-lucide="history" style="width:15px;height:15px;color:var(--accent);"></i>
+        Historique des attributions
+    </h2>
     <div class="history-list">
         {% for item in historique %}
         <article class="history-item">
             <div class="history-item-header">
                 <div>
                     <div class="history-strong">{{ item.attribue_a }}</div>
-                    <div class="history-meta">{{ item.date_attribution }}{% if item.date_retour %} → {{ item.date_retour }}{% endif %}</div>
+                    <div class="history-meta" style="display:flex;align-items:center;gap:5px;margin-top:2px;">
+                        <i data-lucide="calendar" style="width:11px;height:11px;"></i>
+                        {{ item.date_attribution }}
+                        {% if item.date_retour %}
+                        <span style="color:var(--txt-3);">→</span>
+                        {{ item.date_retour }}
+                        {% endif %}
+                    </div>
                 </div>
                 <span class="badge {% if item.is_active %}badge-active{% else %}badge-neutral{% endif %}">
                     {% if item.is_active %}En cours{% else %}Terminé{% endif %}
                 </span>
             </div>
-            <div class="history-meta">Attribué par {{ item.attribue_par }}</div>
+            <div class="history-meta" style="display:flex;align-items:center;gap:5px;">
+                <i data-lucide="shield-user" style="width:11px;height:11px;"></i>
+                Attribué par {{ item.attribue_par }}
+            </div>
             {% if item.notes %}
-            <div class="history-meta">{{ item.notes }}</div>
+            <div class="history-meta" style="color:var(--txt-3);font-style:italic;">{{ item.notes }}</div>
             {% endif %}
         </article>
         {% endfor %}
@@ -87,17 +160,31 @@
 </section>
 {% endif %}
 
+<!-- Actions -->
 <section class="sticky-actions">
     <div class="stack-actions">
         {% if materiel.est_attribue %}
         <form method="POST" action="{{ url_for('main.recuperer', code_vigile=materiel.code_vigile) }}" style="flex:1;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-danger btn-block" type="submit">Récupérer</button>
+            <button class="btn btn-danger btn-block" type="submit">
+                <i data-lucide="undo-2"></i>
+                Récupérer
+            </button>
         </form>
         {% else %}
-        <a class="btn btn-primary btn-block" href="{{ url_for('main.attribuer', code_vigile=materiel.code_vigile) }}">Attribuer</a>
+        <a class="btn btn-primary btn-block" href="{{ url_for('main.attribuer', code_vigile=materiel.code_vigile) }}">
+            <i data-lucide="user-plus"></i>
+            Attribuer
+        </a>
         {% endif %}
-        <a class="btn btn-secondary btn-block" href="{{ url_for('main.scan') }}">Scanner un autre</a>
+        <a class="btn btn-secondary btn-block" href="{{ url_for('main.modifier_materiel', mat_id=materiel.id) }}">
+            <i data-lucide="pencil"></i>
+            Modifier
+        </a>
+        <a class="btn btn-secondary btn-block" href="{{ url_for('main.scan') }}">
+            <i data-lucide="scan-line"></i>
+            Scanner
+        </a>
     </div>
 </section>
 {% endblock %}

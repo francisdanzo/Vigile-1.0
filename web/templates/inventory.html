@@ -1,88 +1,211 @@
 {% extends "base.html" %}
 
-{% block title %}Inventaire - {{ app_name }}{% endblock %}
+{% block title %}Inventaire — {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+    .inv-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 24px;
+    }
+
+    .inv-filters {
+        display: grid;
+        gap: 10px;
+    }
+
+    .inv-filter-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .inv-filter-row .field { flex: 1; min-width: 120px; }
+
+    .inventory-item { gap: 12px; }
+
+    .inv-main {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .inv-identity { display: grid; gap: 3px; }
+
+    .inv-code {
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+    }
+
+    .inv-desc {
+        color: var(--txt-2);
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .inv-badges {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        flex-wrap: wrap;
+        flex-shrink: 0;
+    }
+
+    .inv-actions {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .count-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: var(--r-full);
+        background: var(--glass);
+        border: 0.5px solid var(--glass-border);
+        color: var(--txt-2);
+        font-size: 12px;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<section>
-    <h1 class="page-title">Inventaire</h1>
-    <p class="page-subtitle">Parcourez, filtrez et mettez à jour le parc matériel.</p>
-</section>
+<div class="inv-header-row">
+    <div>
+        <h1 class="page-title">Inventaire</h1>
+        <p class="page-subtitle">Gérez et filtrez le parc matériel.</p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('main.ajouter_materiel') }}">
+        <i data-lucide="plus"></i>
+        Ajouter
+    </a>
+</div>
 
-<section class="card">
-    <form method="GET" action="{{ url_for('main.inventaire') }}" class="form-grid">
-        <div class="field">
-            <input id="q" name="q" type="text" placeholder=" " value="{{ filters.q or '' }}">
-            <label for="q">Recherche</label>
-        </div>
-        <div class="panel-grid two-up">
+<section class="card inv-filters" style="margin-bottom:16px;">
+    <form method="GET" action="{{ url_for('main.inventaire') }}">
+        <div class="form-grid">
             <div class="field">
-                <select id="type" name="type">
-                    <option value="">Tous</option>
-                    {% for item in types %}
-                    <option value="{{ item }}" {% if filters.type == item %}selected{% endif %}>{{ item | capitalize }}</option>
-                    {% endfor %}
-                </select>
-                <label for="type">Type</label>
+                <input id="q" name="q" type="text" placeholder=" " value="{{ filters.q or '' }}" autocomplete="off">
+                <label for="q">Recherche — code, marque, modèle, série…</label>
             </div>
-            <div class="field">
-                <select id="etat" name="etat">
-                    <option value="">Tous</option>
-                    {% for item in etats %}
-                    <option value="{{ item }}" {% if filters.etat == item %}selected{% endif %}>{{ item | capitalize }}</option>
-                    {% endfor %}
-                </select>
-                <label for="etat">État</label>
+            <div class="inv-filter-row">
+                <div class="field">
+                    <select id="type" name="type">
+                        <option value="">Tous les types</option>
+                        {% for item in types %}
+                        <option value="{{ item }}" {% if filters.type == item %}selected{% endif %}>{{ item | capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="type">Type</label>
+                </div>
+                <div class="field">
+                    <select id="etat" name="etat">
+                        <option value="">Tous les états</option>
+                        {% for item in etats %}
+                        <option value="{{ item }}" {% if filters.etat == item %}selected{% endif %}>{{ item | replace('_',' ') | capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="etat">État</label>
+                </div>
+                <div class="field">
+                    <select id="emplacement" name="emplacement">
+                        <option value="">Tous les emplacements</option>
+                        {% for item in emplacements %}
+                        <option value="{{ item }}" {% if filters.emplacement == item %}selected{% endif %}>{{ item | replace('_',' ') | capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="emplacement">Emplacement</label>
+                </div>
             </div>
-        </div>
-        <div class="field">
-            <select id="emplacement" name="emplacement">
-                <option value="">Tous</option>
-                {% for item in emplacements %}
-                <option value="{{ item }}" {% if filters.emplacement == item %}selected{% endif %}>{{ item | replace('_', ' ') | capitalize }}</option>
-                {% endfor %}
-            </select>
-            <label for="emplacement">Emplacement</label>
-        </div>
-        <div class="button-row">
-            <button class="btn btn-primary" type="submit">Filtrer</button>
-            <a class="btn btn-secondary" href="{{ url_for('main.ajouter_materiel') }}">Ajouter</a>
-            <a class="btn btn-secondary" href="{{ url_for('main.inventaire') }}">Réinitialiser</a>
+            <div class="button-row">
+                <button class="btn btn-primary" type="submit">
+                    <i data-lucide="search"></i>
+                    Filtrer
+                </button>
+                {% if filters.q or filters.type or filters.etat or filters.emplacement %}
+                <a class="btn btn-secondary" href="{{ url_for('main.inventaire') }}">
+                    <i data-lucide="x"></i>
+                    Réinitialiser
+                </a>
+                {% endif %}
+            </div>
         </div>
     </form>
 </section>
 
-<section class="inventory-list">
+<div class="inventory-list">
     {% for mat in materiels %}
     {% set attr = mat.attribution_active %}
     <article class="inventory-item">
-        <div class="inventory-item-header">
-            <div>
-                <div class="inventory-strong code-mono" style="font-size:18px;">{{ mat.code_vigile }}</div>
-                <div class="inventory-meta">{{ mat.type | capitalize }} · {{ mat.marque or '—' }} {{ mat.modele or '' }}</div>
+        <div class="inv-main">
+            <div class="inv-identity">
+                <span class="inv-code code-mono">{{ mat.code_vigile }}</span>
+                <span class="inv-desc">
+                    {{ mat.type | capitalize }}
+                    {% if mat.marque %} · {{ mat.marque }}{% endif %}
+                    {% if mat.modele %} {{ mat.modele }}{% endif %}
+                </span>
             </div>
-            <span class="badge badge-{{ mat.etat }}">{{ mat.etat | replace('_', ' ') | capitalize }}</span>
+            <div class="inv-badges">
+                <span class="badge badge-{{ mat.etat }}">{{ mat.etat | replace('_',' ') | capitalize }}</span>
+            </div>
         </div>
-        <div class="button-row">
-            <span class="badge badge-neutral">{{ mat.emplacement | replace('_', ' ') | capitalize }}</span>
-            {% if attr %}
-            <span class="badge badge-active">{{ attr.attribue_a }}</span>
-            {% else %}
-            <span class="badge badge-neutral">Disponible</span>
-            {% endif %}
-        </div>
-        <div class="button-row">
-            <a class="btn btn-secondary" href="{{ url_for('main.fiche_materiel', code_vigile=mat.code_vigile) }}">Voir</a>
-            <a class="btn btn-secondary" href="{{ url_for('main.modifier_materiel', mat_id=mat.id) }}">Modifier</a>
-            <form method="POST" action="{{ url_for('main.supprimer_materiel', mat_id=mat.id) }}" style="flex:1;" onsubmit="return confirm('Supprimer {{ mat.code_vigile }} ?')">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button class="btn btn-danger btn-block" type="submit">Supprimer</button>
-            </form>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <span class="badge badge-neutral">
+                    <i data-lucide="map-pin" style="width:10px;height:10px;"></i>
+                    {{ mat.emplacement | replace('_',' ') | capitalize }}
+                </span>
+                {% if attr %}
+                <span class="badge badge-active">
+                    <i data-lucide="user" style="width:10px;height:10px;"></i>
+                    {{ attr.attribue_a }}
+                </span>
+                {% else %}
+                <span class="badge badge-neuf">Disponible</span>
+                {% endif %}
+            </div>
+            <div class="inv-actions">
+                <a class="btn btn-secondary btn-icon" href="{{ url_for('main.fiche_materiel', code_vigile=mat.code_vigile) }}" title="Voir la fiche">
+                    <i data-lucide="eye"></i>
+                </a>
+                <a class="btn btn-secondary btn-icon" href="{{ url_for('main.modifier_materiel', mat_id=mat.id) }}" title="Modifier">
+                    <i data-lucide="pencil"></i>
+                </a>
+                <form method="POST" action="{{ url_for('main.supprimer_materiel', mat_id=mat.id) }}"
+                      style="display:contents;" onsubmit="return confirm('Supprimer {{ mat.code_vigile }} définitivement ?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-secondary btn-icon" type="submit" title="Supprimer"
+                            style="color:var(--txt-3);border-color:var(--glass-border);"
+                            onmouseover="this.style.color='var(--danger)';this.style.borderColor='rgba(255,69,58,0.25)'"
+                            onmouseout="this.style.color='var(--txt-3)';this.style.borderColor='var(--glass-border)'">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                </form>
+            </div>
         </div>
     </article>
     {% else %}
-    <section class="card">
-        <div class="empty-state">Aucun matériel trouvé avec les filtres actuels.</div>
-    </section>
+    <div class="card">
+        <div class="empty-state">
+            <i data-lucide="package-search" style="width:40px;height:40px;opacity:0.3;"></i>
+            <span>Aucun matériel trouvé avec les filtres actuels.</span>
+            <a class="btn btn-secondary" href="{{ url_for('main.inventaire') }}">
+                <i data-lucide="refresh-cw"></i>
+                Réinitialiser les filtres
+            </a>
+        </div>
+    </div>
     {% endfor %}
-</section>
+</div>
 {% endblock %}

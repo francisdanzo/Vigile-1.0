@@ -1,59 +1,75 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - {{ app_name }}{% endblock %}
+{% block title %}Dashboard — {{ app_name }}{% endblock %}
 
 {% block content %}
-<section>
+<section style="margin-bottom:24px;">
     <h1 class="page-title">Dashboard</h1>
-    <p class="page-subtitle">Vue synthétique du parc et de l’activité récente.</p>
+    <p class="page-subtitle">Vue synthétique du parc et de l'activité récente.</p>
 </section>
 
-<section class="panel-grid two-up">
+<section class="panel-grid two-up" style="margin-bottom:14px;">
     <article class="stat-card">
         <div class="stat-top">
-            <div class="stat-label">Total équipements</div>
-            <div class="stat-icon" style="background: rgba(77,166,255,0.14); color: var(--accent-info);">◫</div>
+            <span class="stat-label">Total</span>
+            <div class="stat-icon" style="background:var(--accent-dim);color:var(--accent);">
+                <i data-lucide="boxes"></i>
+            </div>
         </div>
         <div class="stat-value" data-count="{{ stats.total }}">0</div>
     </article>
+
     <article class="stat-card">
         <div class="stat-top">
-            <div class="stat-label">Disponibles</div>
-            <div class="stat-icon" style="background: rgba(0,212,170,0.14); color: var(--accent-secondary);">✓</div>
+            <span class="stat-label">Disponibles</span>
+            <div class="stat-icon" style="background:var(--success-dim);color:var(--success);">
+                <i data-lucide="circle-check"></i>
+            </div>
         </div>
-        <div class="stat-value" data-count="{{ stats.disponible }}">0</div>
+        <div class="stat-value" style="color:var(--success);" data-count="{{ stats.disponible }}">0</div>
     </article>
+
     <article class="stat-card">
         <div class="stat-top">
-            <div class="stat-label">En prêt</div>
-            <div class="stat-icon" style="background: rgba(255,179,71,0.16); color: var(--accent-warning);">👤</div>
+            <span class="stat-label">En prêt</span>
+            <div class="stat-icon" style="background:var(--warning-dim);color:var(--warning);">
+                <i data-lucide="user-check"></i>
+            </div>
         </div>
-        <div class="stat-value" data-count="{{ stats.attribue }}">0</div>
+        <div class="stat-value" style="color:var(--warning);" data-count="{{ stats.attribue }}">0</div>
     </article>
+
     <article class="stat-card">
         <div class="stat-top">
-            <div class="stat-label">En maintenance</div>
-            <div class="stat-icon" style="background: rgba(255,92,122,0.16); color: var(--accent-danger);">⚠</div>
+            <span class="stat-label">En panne</span>
+            <div class="stat-icon" style="background:var(--danger-dim);color:var(--danger);">
+                <i data-lucide="triangle-alert"></i>
+            </div>
         </div>
-        <div class="stat-value" data-count="{{ stats.en_panne }}">0</div>
+        <div class="stat-value" style="color:var(--danger);" data-count="{{ stats.en_panne }}">0</div>
     </article>
 </section>
 
 {% if alerts %}
-<section class="card" style="border: 1px solid rgba(255,179,71,0.4);">
-    <div>
-        <h2 class="card-title" style="color: var(--accent-warning);">⚠ Attributions longues (> {{ alerte_jours }} jours)</h2>
-        <p class="card-subtitle">Ces matériels sont attribués depuis plus de {{ alerte_jours }} jours sans retour enregistré.</p>
+<section class="card" style="border-color:rgba(255,214,10,0.28);margin-bottom:14px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:34px;height:34px;border-radius:10px;background:var(--warning-dim);color:var(--warning);display:grid;place-items:center;flex-shrink:0;border:0.5px solid rgba(255,214,10,0.20);">
+            <i data-lucide="clock-alert" style="width:17px;height:17px;"></i>
+        </div>
+        <div>
+            <h2 class="card-title" style="color:var(--warning);">Attributions longues durée</h2>
+            <p class="card-subtitle">Attribuées depuis plus de {{ alerte_jours }} jours sans retour.</p>
+        </div>
     </div>
     <div class="activity-list">
         {% for alert in alerts %}
-        <article class="activity-item" style="border-left: 3px solid var(--accent-warning); padding-left: 10px;">
+        <article class="activity-item" style="border-left:2px solid var(--warning);padding-left:14px;">
             <div class="history-item-header">
                 <div>
-                    <div class="history-strong">{{ alert.code }}</div>
-                    <div class="history-meta">{{ alert.person }}</div>
+                    <div class="history-strong code-mono" style="font-size:14px;">{{ alert.code }}</div>
+                    <div class="history-meta" style="margin-top:2px;">{{ alert.person }}</div>
                 </div>
-                <span class="badge" style="background: rgba(255,179,71,0.18); color: var(--accent-warning);">
+                <span class="badge" style="background:var(--warning-dim);color:var(--warning);">
                     {{ alert.days }} j
                 </span>
             </div>
@@ -64,26 +80,37 @@
 {% endif %}
 
 <section class="card">
-    <div>
-        <h2 class="card-title">Activité récente</h2>
-        <p class="card-subtitle">Dernières attributions enregistrées dans VIGILE.</p>
+    <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:34px;height:34px;border-radius:10px;background:var(--accent-dim);color:var(--accent);display:grid;place-items:center;flex-shrink:0;border:0.5px solid rgba(10,132,255,0.18);">
+            <i data-lucide="activity" style="width:17px;height:17px;"></i>
+        </div>
+        <div>
+            <h2 class="card-title">Activité récente</h2>
+            <p class="card-subtitle">Dernières attributions enregistrées.</p>
+        </div>
     </div>
     <div class="activity-list">
         {% for attr in activites %}
         <article class="activity-item">
             <div class="history-item-header">
                 <div>
-                    <div class="history-strong">{{ attr.materiel.code_vigile if attr.materiel else '—' }}</div>
-                    <div class="history-meta">{{ attr.attribue_a }}</div>
+                    <div class="history-strong code-mono" style="font-size:13px;">{{ attr.materiel.code_vigile if attr.materiel else '—' }}</div>
+                    <div class="history-meta" style="margin-top:2px;">{{ attr.attribue_a }}</div>
                 </div>
                 <span class="badge {% if attr.is_active %}badge-active{% else %}badge-neutral{% endif %}">
                     {% if attr.is_active %}En prêt{% else %}Retourné{% endif %}
                 </span>
             </div>
-            <div class="history-meta">Attribué le {{ attr.date_attribution.strftime('%d/%m/%Y %H:%M') }}</div>
+            <div class="history-meta" style="display:flex;align-items:center;gap:5px;">
+                <i data-lucide="calendar" style="width:11px;height:11px;flex-shrink:0;"></i>
+                {{ attr.date_attribution.strftime('%d/%m/%Y %H:%M') }}
+            </div>
         </article>
         {% else %}
-        <div class="empty-state">Aucune activité récente.</div>
+        <div class="empty-state">
+            <i data-lucide="inbox" style="width:36px;height:36px;opacity:0.3;"></i>
+            Aucune activité récente.
+        </div>
         {% endfor %}
     </div>
 </section>
@@ -91,14 +118,16 @@
 
 {% block scripts %}
 <script>
-    document.querySelectorAll('[data-count]').forEach((node) => {
-        const target = Number(node.dataset.count || 0);
-        const duration = 700;
-        const start = performance.now();
+    document.querySelectorAll('[data-count]').forEach(function (node) {
+        var target = Number(node.dataset.count || 0);
+        if (target === 0) return;
+        var start = performance.now();
+        var duration = 800;
         function step(now) {
-            const progress = Math.min((now - start) / duration, 1);
-            node.textContent = Math.round(target * progress);
-            if (progress < 1) requestAnimationFrame(step);
+            var p = Math.min((now - start) / duration, 1);
+            var ease = 1 - Math.pow(1 - p, 3);
+            node.textContent = Math.round(target * ease);
+            if (p < 1) requestAnimationFrame(step);
         }
         requestAnimationFrame(step);
     });

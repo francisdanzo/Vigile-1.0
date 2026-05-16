@@ -5,6 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QTableWidgetItem, QVBoxLayout, QWidget
 
 from database import get_session
@@ -39,6 +40,10 @@ class HistoryFrame(QWidget):
         self.table = VigileTable(["Statut", "Code", "Type", "Attribué à", "Attribution", "Retour", "Notes"])
         table_card.layout().addWidget(self.table)
         root.addWidget(table_card)
+        self._refreshing = False
+        self._auto_timer = QTimer(self)
+        self._auto_timer.setInterval(500)
+        self._auto_timer.timeout.connect(self.refresh)
         self.person.textChanged.connect(self.refresh)
         self.code.textChanged.connect(self.refresh)
         self.status.currentTextChanged.connect(self.refresh)
@@ -75,12 +80,26 @@ class HistoryFrame(QWidget):
             session.close()
 
     def refresh(self) -> None:
+        if self._refreshing:
+            return
+        self._refreshing = True
         run_in_thread(self, self._fetch, self._bind, None, self.person.text().strip(), self.code.text().strip(), self.status.currentText())
 
+    def showEvent(self, event) -> None:
+        self._auto_timer.start()
+        super().showEvent(event)
+
+    def hideEvent(self, event) -> None:
+        self._auto_timer.stop()
+        super().hideEvent(event)
+
     def _bind(self, rows: list[dict]) -> None:
+        self.table.setSortingEnabled(False)
+        self._refreshing = False
         self.table.setRowCount(0)
         if not rows:
             self.table.empty("Aucun historique trouvé")
+            self.table.setSortingEnabled(True)
             return
         self.table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
@@ -91,3 +110,4 @@ class HistoryFrame(QWidget):
             self.table.setItem(row_index, 4, QTableWidgetItem(row["attribution"]))
             self.table.setItem(row_index, 5, QTableWidgetItem(row["retour"]))
             self.table.setItem(row_index, 6, QTableWidgetItem(row["notes"]))
+        self.table.setSortingEnabled(True)

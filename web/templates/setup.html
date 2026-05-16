@@ -1,101 +1,86 @@
 {% extends "base.html" %}
 
-{% block title %}Configuration initiale - {{ app_name }}{% endblock %}
+{% block title %}Configuration initiale — {{ app_name }}{% endblock %}
 {% block screen_class %}login-screen{% endblock %}
 
 {% block head %}
 <style>
-    .setup-outer { min-height: calc(100vh - 36px); place-content: center; }
-    [data-theme="dark"]  .setup-outer { background: linear-gradient(180deg, rgba(17,17,24,0.9), rgba(13,13,20,0.95)); }
-    [data-theme="light"] .setup-outer { background: linear-gradient(180deg, rgba(242,242,248,0.92), rgba(234,234,242,0.96)); }
-    .setup-inner { min-height: 400px; }
-    [data-theme="dark"]  .setup-inner { background: rgba(22,22,31,0.82); }
-    [data-theme="light"] .setup-inner { background: rgba(255,255,255,0.92); }
-
-    .setup-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 14px;
-        border-radius: var(--radius-pill);
-        background: rgba(124, 107, 255, 0.14);
-        color: var(--accent-primary);
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-    }
-    [data-theme="light"] .setup-badge {
-        background: rgba(92, 72, 232, 0.10);
-    }
-
-    .login-theme-toggle {
-        position: fixed;
-        top: 16px;
-        right: 18px;
-        z-index: 50;
-        appearance: none;
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-pill);
-        background: var(--theme-toggle-bg);
-        color: var(--text-secondary);
-        width: 38px;
-        height: 38px;
+    .setup-logo-wrap {
+        width: 76px; height: 76px;
+        border-radius: 24px;
+        background: var(--glass-md);
+        border: 0.5px solid var(--glass-border);
+        box-shadow:
+            inset 0 1px 0 var(--glass-shine),
+            0 16px 40px rgba(10,132,255,0.22),
+            0 4px 12px rgba(0,0,0,0.3);
         display: grid;
         place-items: center;
-        cursor: pointer;
-        font-size: 17px;
-        transition: border-color 0.18s ease, transform 0.12s ease;
+        margin: 0 auto;
+        position: relative;
+        overflow: hidden;
     }
-    .login-theme-toggle:hover { border-color: var(--accent-primary); }
-    .login-theme-toggle:active { transform: scale(0.88); }
+
+    .setup-logo-wrap::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 50%;
+        background: radial-gradient(ellipse 100% 100% at 50% -10%, rgba(255,255,255,0.14) 0%, transparent 80%);
+    }
+
+    .setup-logo-wrap img {
+        width: 46px; height: 46px;
+        object-fit: contain;
+        border-radius: 8px;
+        position: relative;
+    }
+
+    .setup-hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        text-align: center;
+    }
 </style>
-<script>
-    (function () {
-        function icon(theme) { return theme === 'dark' ? '☀' : '🌙'; }
-        document.addEventListener('DOMContentLoaded', function () {
-            var btn = document.getElementById('login-theme-toggle');
-            if (!btn) return;
-            btn.querySelector('.theme-icon').textContent = icon(document.documentElement.getAttribute('data-theme') || 'dark');
-            btn.addEventListener('click', function () {
-                var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-                document.documentElement.setAttribute('data-theme', next);
-                localStorage.setItem('vigile-theme', next);
-                btn.querySelector('.theme-icon').textContent = icon(next);
-            });
-        });
-    })();
-</script>
 {% endblock %}
 
 {% block content %}
-<button class="login-theme-toggle" id="login-theme-toggle" title="Thème clair / sombre" aria-label="Basculer le thème">
-    <span class="theme-icon">☀</span>
+<button class="icon-btn login-theme-toggle" id="login-theme-toggle" aria-label="Basculer le thème">
+    <span class="ti-dark"><i data-lucide="sun"></i></span>
+    <span class="ti-light"><i data-lucide="moon"></i></span>
 </button>
 
-<section class="card setup-outer">
-    <div style="display:grid; gap:14px; text-align:center;">
-        <div style="font-size:64px; line-height:1; filter: drop-shadow(0 18px 28px rgba(124,107,255,0.28));">🛡</div>
+<div class="setup-outer">
+    <div class="setup-hero">
+        <div class="setup-logo-wrap">
+            <img src="{{ url_for('main.serve_logo') }}" alt="{{ app_name }}">
+        </div>
         <div>
-            <h1 class="page-title" style="margin:0;">{{ app_name }}</h1>
-            <p class="page-subtitle" style="color: var(--gold); font-style: italic;">{{ app_slogan }}</p>
+            <h1 class="page-title" style="font-size:30px;">{{ app_name }}</h1>
+            <p class="page-subtitle" style="color:var(--gold);font-style:italic;margin-top:5px;font-size:13px;">{{ app_slogan }}</p>
         </div>
-        <div style="display:flex; justify-content:center;">
-            <span class="setup-badge">✦ Premier lancement</span>
-        </div>
+        <span class="setup-badge">
+            <i data-lucide="sparkles" style="width:12px;height:12px;"></i>
+            Premier lancement
+        </span>
     </div>
 
-    <div class="card setup-inner">
+    <div class="card" style="gap:20px;">
         <div>
-            <h2 class="card-title">Créer le compte administrateur</h2>
-            <p class="card-subtitle">Ce compte aura accès complet à VIGILE. Il n'existe aucun autre moyen d'accéder au système.</p>
+            <h2 class="card-title" style="font-size:17px;">Créer le compte administrateur</h2>
+            <p class="card-subtitle">
+                Ce compte aura un accès complet au système.
+                Il n'existe aucun autre moyen d'accéder à VIGILE.
+            </p>
         </div>
 
         <form method="POST" action="{{ url_for('main.setup') }}" class="form-grid" id="setup-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="field">
                 <input id="username" name="username" type="text" placeholder=" "
-                       autocomplete="username" required autofocus
-                       minlength="3" maxlength="80">
+                       autocomplete="username" required autofocus minlength="3" maxlength="80">
                 <label for="username">Nom d'utilisateur</label>
             </div>
             <div class="field">
@@ -105,7 +90,7 @@
             </div>
             <div class="field">
                 <input id="password" name="password" type="password" placeholder=" "
-                       autocomplete="new-password" required minlength="8" id="password">
+                       autocomplete="new-password" required minlength="8">
                 <label for="password">Mot de passe</label>
             </div>
             <div class="field">
@@ -114,53 +99,51 @@
                 <label for="confirm">Confirmer le mot de passe</label>
             </div>
 
-            <p class="form-help" id="pw-hint" style="color: var(--text-muted);">
-                Minimum 8 caractères.
-            </p>
+            <p class="form-help" id="pw-hint">Minimum 8 caractères.</p>
 
             <button class="btn btn-primary btn-block" type="submit" id="submit-btn">
+                <i data-lucide="shield-check"></i>
                 Créer l'administrateur
             </button>
         </form>
 
-        <div style="text-align:center; color:var(--text-muted); font-size:12px;">
+        <div style="text-align:center;color:var(--txt-3);font-size:11px;">
             Version {{ app_version }} — Ce formulaire disparaît après la création du premier compte.
         </div>
     </div>
-</section>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
     (function () {
-        var form     = document.getElementById('setup-form');
-        var pwField  = document.getElementById('password');
-        var cfField  = document.getElementById('confirm');
-        var hint     = document.getElementById('pw-hint');
-        var submitBtn = document.getElementById('submit-btn');
+        var pw = document.getElementById('password');
+        var cf = document.getElementById('confirm');
+        var hint = document.getElementById('pw-hint');
+        var sub = document.getElementById('submit-btn');
 
         function validate() {
-            var pw = pwField.value;
-            var cf = cfField.value;
-            if (cf.length === 0) {
+            if (!cf.value) {
                 hint.textContent = 'Minimum 8 caractères.';
-                hint.style.color = 'var(--text-muted)';
-                submitBtn.disabled = false;
+                hint.style.color = 'var(--txt-3)';
+                sub.disabled = false;
                 return;
             }
-            if (pw !== cf) {
+            if (pw.value !== cf.value) {
                 hint.textContent = 'Les mots de passe ne correspondent pas.';
-                hint.style.color = 'var(--accent-danger)';
-                submitBtn.disabled = true;
+                hint.style.color = 'var(--danger)';
+                sub.disabled = true;
             } else {
-                hint.textContent = 'Les mots de passe correspondent.';
-                hint.style.color = 'var(--accent-secondary)';
-                submitBtn.disabled = false;
+                hint.textContent = 'Les mots de passe correspondent ✓';
+                hint.style.color = 'var(--success)';
+                sub.disabled = false;
             }
         }
 
-        pwField.addEventListener('input', validate);
-        cfField.addEventListener('input', validate);
+        if (pw && cf) {
+            pw.addEventListener('input', validate);
+            cf.addEventListener('input', validate);
+        }
     })();
 </script>
 {% endblock %}

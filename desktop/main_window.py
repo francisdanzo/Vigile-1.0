@@ -61,39 +61,39 @@ from tunnel import _get_cloudflared_path, telecharger_cloudflared
 # ── Palettes de thème ──────────────────────────────────────────────────────────
 
 COLORS_DARK = {
-    "bg": "#0d0d14",
-    "sidebar": "#111118",
-    "card": "#16161f",
-    "input": "#1e1e2a",
-    "hover": "#22222e",
-    "primary": "#7c6bff",
-    "secondary": "#00d4aa",
-    "danger": "#ff5c7a",
-    "warning": "#ffb347",
-    "info": "#4da6ff",
-    "text": "#f0f0f8",
-    "text_secondary": "#9090aa",
-    "muted": "#4a4a60",
-    "border": "#2a2a38",
-    "gold": "#f0c040",
+    "bg": "#06060e",
+    "sidebar": "#0a0a18",
+    "card": "#0e0e1e",
+    "input": "#08081a",
+    "hover": "#0d1a30",
+    "primary": "#0A84FF",
+    "secondary": "#30D158",
+    "danger": "#FF453A",
+    "warning": "#FFD60A",
+    "info": "#5E5CE6",
+    "text": "#FFFFFF",
+    "text_secondary": "#8899bb",
+    "muted": "#444f6a",
+    "border": "#1c1c38",
+    "gold": "#FFD60A",
 }
 
 COLORS_LIGHT = {
-    "bg": "#f2f2f8",
-    "sidebar": "#eaeaf2",
-    "card": "#ffffff",
-    "input": "#f0f0f8",
-    "hover": "#e8e8f2",
-    "primary": "#6150e8",
-    "secondary": "#00aa88",
-    "danger": "#e83058",
-    "warning": "#c07010",
-    "info": "#1a70e8",
-    "text": "#12121a",
-    "text_secondary": "#58587a",
-    "muted": "#9898b8",
-    "border": "#d8d8ea",
-    "gold": "#a06800",
+    "bg": "#F2F2F7",
+    "sidebar": "#FFFFFF",
+    "card": "#FFFFFF",
+    "input": "#F5F5FA",
+    "hover": "#EEF4FF",
+    "primary": "#007AFF",
+    "secondary": "#34C759",
+    "danger": "#FF3B30",
+    "warning": "#FF9F0A",
+    "info": "#5856D6",
+    "text": "#1D1D1F",
+    "text_secondary": "#636366",
+    "muted": "#98989D",
+    "border": "#E5E5EA",
+    "gold": "#FF9F0A",
 }
 
 _THEME_FILE = os.path.join(DATA_DIR, "theme.txt")
@@ -161,7 +161,9 @@ def apply_desktop_theme(theme: str) -> None:
 
 def alpha(color: str, value: int) -> str:
     qcolor = QColor(color)
-    return f"rgba({qcolor.red()}, {qcolor.green()}, {qcolor.blue()}, {value})"
+    # Qt 6 attend souvent un float 0-1 pour l'alpha dans rgba() en CSS
+    a = value / 255.0
+    return f"rgba({qcolor.red()}, {qcolor.green()}, {qcolor.blue()}, {a:.2f})"
 
 
 def _logo_pixmap(size: int) -> QPixmap | None:
@@ -341,9 +343,10 @@ class VigileInput(QFrame):
 
 
 class VigileButton(QPushButton):
-    def __init__(self, text: str, variant: str = "primary", parent: QWidget | None = None):
+    def __init__(self, text: str, variant: str = "primary", padding: str = "10px 18px", parent: QWidget | None = None):
         super().__init__(text, parent)
         self.variant = variant
+        self.padding = padding
         self._cached_text = text
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._anim = QPropertyAnimation(self, b"iconSize", self)
@@ -364,7 +367,7 @@ class VigileButton(QPushButton):
         hover_bg = COLORS["hover"] if bg == "transparent" else bg
         self.setStyleSheet(
             f"QPushButton {{ background-color: {bg}; color: {fg}; border: 1px solid {border}; "
-            f"border-radius: 8px; padding: 10px 18px; font-weight: bold; }}"
+            f"border-radius: 8px; padding: {self.padding}; font-weight: bold; }}"
             f"QPushButton:hover {{ background-color: {hover_bg}; border: 1px solid {COLORS['primary']}; }}"
             f"QPushButton:disabled {{ color: {COLORS['muted']}; border: 1px solid {border}; }}"
         )
@@ -410,6 +413,7 @@ class VigileTable(QTableWidget):
         super().__init__(0, len(columns), parent)
         self.setHorizontalHeaderLabels([column.upper() for column in columns])
         self.verticalHeader().setVisible(False)
+        self.verticalHeader().setDefaultSectionSize(40)
         self.setAlternatingRowColors(True)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -1091,6 +1095,11 @@ class DashboardFrame(QWidget):
             quick_row.addWidget(button)
         quick.layout().addLayout(quick_row)
         layout.addWidget(quick)
+        self._refreshing = False
+        self._first_load = True
+        self._auto_timer = QTimer(self)
+        self._auto_timer.setInterval(500)
+        self._auto_timer.timeout.connect(self.refresh)
         self.refresh()
 
     def _update_clock(self) -> None:
@@ -1145,14 +1154,31 @@ class DashboardFrame(QWidget):
             session.close()
 
     def refresh(self) -> None:
+        if self._refreshing:
+            return
+        self._refreshing = True
         run_in_thread(self, self._load, self._bind)
 
+    def showEvent(self, event) -> None:
+        self._auto_timer.start()
+        super().showEvent(event)
+
+    def hideEvent(self, event) -> None:
+        self._auto_timer.stop()
+        super().hideEvent(event)
+
     def _bind(self, payload: dict) -> None:
+        self._refreshing = False
         for key, label in self.kpis.items():
-            label.animate_to(payload["stats"][key])
+            if self._first_load:
+                label.animate_to(payload["stats"][key])
+            else:
+                label.setText(str(payload["stats"][key]))
+        self._first_load = False
         self.chart.set_data(payload["states"])
 
         # Alertes
+        self.alert_table.setSortingEnabled(False)
         alerts = payload.get("alerts", [])
         if alerts:
             self.alert_card.show()
@@ -1165,16 +1191,20 @@ class DashboardFrame(QWidget):
                 self.alert_table.setItem(row, 2, days_item)
         else:
             self.alert_card.hide()
+        self.alert_table.setSortingEnabled(True)
 
+        self.activity_table.setSortingEnabled(False)
         self.activity_table.setRowCount(0)
         if not payload["activities"]:
             self.activity_table.empty("Aucune attribution récente")
+            self.activity_table.setSortingEnabled(True)
             return
         self.activity_table.setRowCount(len(payload["activities"]))
         for row, activity in enumerate(payload["activities"]):
             self.activity_table.setItem(row, 0, QTableWidgetItem(activity["materiel"]))
             self.activity_table.setItem(row, 1, QTableWidgetItem(activity["person"]))
             self.activity_table.setItem(row, 2, QTableWidgetItem(activity["date"]))
+        self.activity_table.setSortingEnabled(True)
 
 
 class TunnelRunner(QThread):

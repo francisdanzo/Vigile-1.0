@@ -1,47 +1,108 @@
 {% extends "base.html" %}
 
-{% block title %}Scanner - {{ app_name }}{% endblock %}
+{% block title %}Scanner — {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+    .scan-page { display: grid; gap: 14px; max-width: 520px; margin: 0 auto; }
+
+    .scanner-header { margin-bottom: 4px; }
+
+    .scanner-card { gap: 16px; }
+
+    .scanner-frame-wrap {
+        position: relative;
+        width: 100%;
+        max-width: 440px;
+        margin: 0 auto;
+    }
+
+    .scan-hint {
+        text-align: center;
+        color: var(--txt-3);
+        font-size: 12px;
+        margin-top: -4px;
+    }
+
+    .manual-divider {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--txt-3);
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+    }
+
+    .manual-divider::before,
+    .manual-divider::after {
+        content: '';
+        flex: 1;
+        height: 0.5px;
+        background: var(--border);
+    }
+
+    .scan-success-overlay {
+        position: absolute;
+        inset: 0;
+        display: none;
+        background: rgba(48,209,88,0.08);
+        border-radius: var(--r-xl);
+        align-items: center;
+        justify-content: center;
+    }
+
+    .scan-success-overlay.visible { display: flex; }
+</style>
+{% endblock %}
 
 {% block content %}
-<section>
-    <h1 class="page-title">Scanner un QR</h1>
-    <p class="page-subtitle">Cadrez l’étiquette VIGILE pour ouvrir instantanément la fiche matérielle.</p>
-</section>
+<div class="scan-page">
+    <div class="scanner-header">
+        <h1 class="page-title">Scanner</h1>
+        <p class="page-subtitle">Cadrez l'étiquette VIGILE pour ouvrir instantanément la fiche.</p>
+    </div>
 
-<section class="card">
-    <div>
-        <h2 class="card-title">Scanner</h2>
-        <p class="card-subtitle">Coins animés et retour visuel en temps réel.</p>
-    </div>
-    <div class="scanner-frame">
-        <video id="scanner-video" playsinline></video>
-        <canvas id="scanner-canvas"></canvas>
-        <div class="scanner-overlay">
-            <span class="scanner-corner top-left"></span>
-            <span class="scanner-corner top-right"></span>
-            <span class="scanner-corner bottom-left"></span>
-            <span class="scanner-corner bottom-right"></span>
+    <div class="card scanner-card">
+        <div class="scanner-frame-wrap">
+            <div class="scanner-frame">
+                <video id="scanner-video" playsinline></video>
+                <canvas id="scanner-canvas"></canvas>
+                <div class="scanner-overlay">
+                    <span class="scanner-corner top-left"></span>
+                    <span class="scanner-corner top-right"></span>
+                    <span class="scanner-corner bottom-left"></span>
+                    <span class="scanner-corner bottom-right"></span>
+                    <div class="scan-line" id="scan-line"></div>
+                </div>
+                <div class="scan-success-overlay" id="scan-success">
+                    <i data-lucide="scan-line" style="width:48px;height:48px;color:var(--success);"></i>
+                </div>
+            </div>
         </div>
-    </div>
-    <div class="scan-status" id="scanner-status">
-        <span class="pulse-dot"></span>
-        <span>Initialisation de la caméra…</span>
-    </div>
-</section>
 
-<section class="card">
-    <div>
-        <h2 class="card-title">Saisie manuelle</h2>
-        <p class="card-subtitle">Alternative rapide si la caméra n’est pas disponible.</p>
-    </div>
-    <form class="form-grid" id="manual-form">
-        <div class="field">
-            <input id="code-input" type="text" placeholder=" " autocomplete="off" pattern="VIG-\d{4}-\d{4}">
-            <label for="code-input">Code VIGILE</label>
+        <div class="scan-status" id="scanner-status">
+            <span class="pulse-dot" id="status-dot"></span>
+            <span id="status-text">Initialisation de la caméra…</span>
         </div>
-        <button class="btn btn-secondary btn-block" type="submit">Rechercher</button>
-    </form>
-</section>
+
+        <p class="scan-hint">Tenez le QR code centré dans le cadre</p>
+
+        <div class="manual-divider">ou saisie manuelle</div>
+
+        <form class="form-grid" id="manual-form">
+            <div class="field">
+                <input id="code-input" type="text" placeholder=" " autocomplete="off"
+                       pattern="VIG-\d{4}-\d{4}" style="text-transform:uppercase;" spellcheck="false">
+                <label for="code-input">Code VIGILE</label>
+            </div>
+            <button class="btn btn-secondary btn-block" type="submit">
+                <i data-lucide="search"></i>
+                Rechercher
+            </button>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -50,30 +111,37 @@
     const video = document.getElementById('scanner-video');
     const canvas = document.getElementById('scanner-canvas');
     const context = canvas.getContext('2d', { willReadFrequently: true });
-    const statusElement = document.getElementById('scanner-status');
+    const statusText = document.getElementById('status-text');
+    const statusDot = document.getElementById('status-dot');
+    const successOverlay = document.getElementById('scan-success');
     const manualForm = document.getElementById('manual-form');
     let lastDetected = '';
     let cooling = false;
 
-    function setStatus(message, success = false) {
-        statusElement.innerHTML = `<span class="pulse-dot" style="background:${success ? 'var(--accent-secondary)' : 'var(--accent-primary)'};"></span><span>${message}</span>`;
+    function setStatus(message, type) {
+        statusText.textContent = message;
+        if (type === 'success') {
+            statusDot.style.background = 'var(--success)';
+            statusDot.style.boxShadow = '0 0 0 0 rgba(48,209,88,0.4)';
+        } else if (type === 'error') {
+            statusDot.style.background = 'var(--danger)';
+        } else {
+            statusDot.style.background = 'var(--accent)';
+            statusDot.style.boxShadow = '';
+        }
     }
 
     async function startCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'environment',
-                    width: { ideal: 720 },
-                    height: { ideal: 720 }
-                }
+                video: { facingMode: 'environment', width: { ideal: 720 }, height: { ideal: 720 } }
             });
             video.srcObject = stream;
             await video.play();
-            setStatus('Recherche active d’un QR code…');
+            setStatus('Recherche active d\'un QR code…', 'active');
             requestAnimationFrame(scanLoop);
-        } catch (error) {
-            setStatus('Caméra indisponible. Utilisez la saisie manuelle.');
+        } catch (err) {
+            setStatus('Caméra indisponible — utilisez la saisie manuelle.', 'error');
         }
     }
 
@@ -84,9 +152,7 @@
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             const image = context.getImageData(0, 0, canvas.width, canvas.height);
             const code = jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
-            if (code && code.data && !cooling) {
-                handleDetection(code.data);
-            }
+            if (code && code.data && !cooling) handleDetection(code.data);
         }
         requestAnimationFrame(scanLoop);
     }
@@ -95,14 +161,15 @@
         if (data === lastDetected) return;
         lastDetected = data;
         cooling = true;
-        setStatus('QR détecté. Redirection…', true);
-        if (navigator.vibrate) navigator.vibrate(120);
+        setStatus('QR détecté — redirection en cours…', 'success');
+        successOverlay.classList.add('visible');
+        if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
         let code = data;
         const match = data.match(/\/materiel\/(VIG-\d{4}-\d{4})/);
         if (match) code = match[1];
-        window.setTimeout(() => {
-            if (/^VIG-\d{4}-\d{4}$/.test(code)) {
-                window.location.href = `/materiel/${code}`;
+        setTimeout(function () {
+            if (/^VIG-\d{4}-\d{4}$/i.test(code)) {
+                window.location.href = '/materiel/' + code.toUpperCase();
                 return;
             }
             if (data.includes('/materiel/')) {
@@ -111,16 +178,21 @@
             }
             cooling = false;
             lastDetected = '';
-            setStatus('QR non reconnu. Réessayez ou saisissez un code.');
-        }, 350);
+            successOverlay.classList.remove('visible');
+            setStatus('QR non reconnu — réessayez ou saisissez le code.', 'error');
+        }, 400);
     }
 
-    manualForm.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const code = document.getElementById('code-input').value.trim();
-        if (code) window.location.href = `/materiel/${code}`;
+    manualForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const code = document.getElementById('code-input').value.trim().toUpperCase();
+        if (code) window.location.href = '/materiel/' + code;
     });
 
-    document.addEventListener('DOMContentLoaded', startCamera);
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startCamera);
+    } else {
+        startCamera();
+    }
 </script>
 {% endblock %}

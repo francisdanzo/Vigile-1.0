@@ -15,8 +15,9 @@ block_cipher = None
 datas = [
     # Templates Jinja2 — Flask les cherche à <_MEIPASS>/web/templates/
     (str(project_dir / "web" / "templates"), "web/templates"),
-    # Thème PyQt6
+    # Thèmes PyQt6 (dark + light)
     (str(project_dir / "vigile_theme.qss"), "."),
+    (str(project_dir / "vigile_theme_light.qss"), "."),
     # Logo (splash, login, sidebar, favicon web)
     (str(project_dir / "assets" / "logo"), "assets/logo"),
 ]
