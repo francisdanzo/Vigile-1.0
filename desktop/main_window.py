@@ -294,7 +294,7 @@ class StyledCard(QFrame):
 
         path = QPainterPath()
         path.addRoundedRect(r, radius, radius)
-        painter.fillPath(path, QColor(255, 255, 255, 13))
+        painter.fillPath(path, QColor(255, 255, 255, 8))
 
         painter.setPen(QPen(self._border, 1.0))
         painter.setBrush(Qt.BrushStyle.NoBrush)
