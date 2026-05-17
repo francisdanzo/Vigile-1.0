@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import socket
 import subprocess
@@ -26,7 +27,7 @@ from PyQt6.QtCore import (
     QVariantAnimation,
     pyqtSignal,
 )
-from PyQt6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPainterPath, QPen, QPixmap
+from PyQt6.QtGui import QBrush, QColor, QFont, QFontDatabase, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient
 from PyQt6.QtWidgets import (
     QApplication,
     QAbstractItemView,
@@ -261,15 +262,15 @@ class StyledCard(QFrame):
     def __init__(self, parent: QWidget | None = None, padding: int = 14):
         super().__init__(parent)
         self.setObjectName("Card")
-        self._border = QColor(COLORS["border"])
+        self._border = QColor(255, 255, 255, 20)
         self._animation = QVariantAnimation(self, duration=200)
-        self._animation.setStartValue(QColor(COLORS["border"]))
-        self._animation.setEndValue(QColor(COLORS["primary"]))
+        self._animation.setStartValue(QColor(255, 255, 255, 20))
+        self._animation.setEndValue(QColor(10, 132, 255, 90))
         self._animation.valueChanged.connect(self._on_border_change)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(padding, padding, padding, padding)
         layout.setSpacing(12)
-        apply_shadow(self, blur=34, y_offset=10, alpha_value=90)
+        apply_shadow(self, blur=34, y_offset=10, alpha_value=60)
 
     def _on_border_change(self, color: QColor) -> None:
         self._border = color
@@ -286,12 +287,26 @@ class StyledCard(QFrame):
         super().leaveEvent(event)
 
     def paintEvent(self, event) -> None:
-        # La bordure est peinte manuellement pour animer la mise en avant au survol.
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setBrush(QColor(COLORS["card"]))
-        painter.setPen(QPen(self._border, 1))
-        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 12, 12)
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        radius = 16.0
+
+        path = QPainterPath()
+        path.addRoundedRect(r, radius, radius)
+        painter.fillPath(path, QColor(255, 255, 255, 13))
+
+        painter.setPen(QPen(self._border, 1.0))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(r, radius, radius)
+
+        hl = QLinearGradient(r.x() + radius, r.y() + 1.0, r.right() - radius, r.y() + 1.0)
+        hl.setColorAt(0.0,  QColor(255, 255, 255, 0))
+        hl.setColorAt(0.20, QColor(255, 255, 255, 85))
+        hl.setColorAt(0.80, QColor(255, 255, 255, 85))
+        hl.setColorAt(1.0,  QColor(255, 255, 255, 0))
+        painter.setPen(QPen(QBrush(hl), 1.2))
+        painter.drawLine(QPointF(r.x() + radius, r.y() + 1.0), QPointF(r.right() - radius, r.y() + 1.0))
 
 
 class StatusBadge(QLabel):
@@ -357,19 +372,32 @@ class VigileButton(QPushButton):
         self._apply_variant()
 
     def _apply_variant(self) -> None:
-        variants = {
-            "primary": (COLORS["primary"], "#ffffff", "transparent"),
-            "secondary": ("transparent", COLORS["text"], COLORS["border"]),
-            "danger": (COLORS["danger"], "#ffffff", "transparent"),
-            "ghost": (COLORS["hover"], COLORS["text"], "transparent"),
+        configs = {
+            "primary": (
+                f"rgba(10,132,255,0.82)", "#FFFFFF",
+                "rgba(10,132,255,0.55)", "rgba(10,132,255,0.92)",
+            ),
+            "secondary": (
+                "rgba(255,255,255,0.07)", "#FFFFFF",
+                "rgba(255,255,255,0.12)", "rgba(255,255,255,0.13)",
+            ),
+            "danger": (
+                f"rgba(255,69,58,0.80)", "#FFFFFF",
+                "rgba(255,69,58,0.50)", "rgba(255,69,58,0.95)",
+            ),
+            "ghost": (
+                "transparent", "rgba(255,255,255,0.70)",
+                "transparent", "rgba(255,255,255,0.07)",
+            ),
         }
-        bg, fg, border = variants.get(self.variant, variants["primary"])
-        hover_bg = COLORS["hover"] if bg == "transparent" else bg
+        bg, fg, border, hover_bg = configs.get(self.variant, configs["primary"])
         self.setStyleSheet(
             f"QPushButton {{ background-color: {bg}; color: {fg}; border: 1px solid {border}; "
-            f"border-radius: 8px; padding: {self.padding}; font-weight: bold; }}"
-            f"QPushButton:hover {{ background-color: {hover_bg}; border: 1px solid {COLORS['primary']}; }}"
-            f"QPushButton:disabled {{ color: {COLORS['muted']}; border: 1px solid {border}; }}"
+            f"border-radius: 8px; padding: {self.padding}; font-weight: 600; }}"
+            f"QPushButton:hover {{ background-color: {hover_bg}; border-color: {border}; }}"
+            f"QPushButton:pressed {{ background-color: {bg}; opacity: 0.8; }}"
+            f"QPushButton:disabled {{ color: rgba(255,255,255,0.26); border: 1px solid rgba(255,255,255,0.05); "
+            f"background-color: rgba(255,255,255,0.03); }}"
         )
 
     def set_loading(self, loading: bool) -> None:
@@ -400,11 +428,11 @@ class SidebarButton(QPushButton):
 
     def _refresh_style(self) -> None:
         self.setStyleSheet(
-            f"QPushButton {{ text-align: left; padding: 12px 16px; border-radius: 10px; "
-            f"background: transparent; color: {COLORS['text_secondary']}; font-weight: 500; }}"
-            f"QPushButton:hover {{ background: {COLORS['hover']}; color: {COLORS['text']}; }}"
-            f"QPushButton:checked {{ background: {alpha(COLORS['primary'], 42)}; color: {COLORS['text']}; "
-            f"border-left: 3px solid {COLORS['primary']}; padding-left: 13px; }}"
+            "QPushButton { text-align: left; padding: 12px 16px; border-radius: 10px; "
+            "background: transparent; color: rgba(255,255,255,0.52); font-weight: 500; border: none; }"
+            "QPushButton:hover { background: rgba(255,255,255,0.07); color: #FFFFFF; }"
+            f"QPushButton:checked {{ background: rgba(10,132,255,0.14); color: #FFFFFF; "
+            f"border-left: 2px solid {COLORS['primary']}; padding-left: 14px; border-radius: 10px; }}"
         )
 
 
@@ -564,113 +592,240 @@ class TitleBar(QFrame):
         super().mouseReleaseEvent(event)
 
 
+class _GlassCard(QWidget):
+    """Panneau verre dépoli peint en paintEvent — surface des deux splash screens."""
+
+    def __init__(self, progress_bar: bool = False, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._progress = 0.0
+        self._has_progress = progress_bar
+        h = 300 if progress_bar else 268
+        self.setFixedSize(430, h)
+        inner = QVBoxLayout(self)
+        inner.setContentsMargins(40, 44, 40, 54 if progress_bar else 40)
+        inner.setSpacing(0)
+        inner.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+
+    def set_progress(self, v: float) -> None:
+        self._progress = max(0.0, min(1.0, v))
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        radius = 22.0
+
+        path = QPainterPath()
+        path.addRoundedRect(r, radius, radius)
+        p.fillPath(path, QColor(255, 255, 255, 16))
+
+        p.setPen(QPen(QColor(255, 255, 255, 28), 1.0))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(r, radius, radius)
+
+        hl = QLinearGradient(r.x() + radius, r.y() + 1.5, r.right() - radius, r.y() + 1.5)
+        hl.setColorAt(0.0, QColor(255, 255, 255, 0))
+        hl.setColorAt(0.25, QColor(255, 255, 255, 110))
+        hl.setColorAt(0.75, QColor(255, 255, 255, 110))
+        hl.setColorAt(1.0, QColor(255, 255, 255, 0))
+        p.setPen(QPen(QBrush(hl), 1.5))
+        p.drawLine(QPointF(r.x() + radius, r.y() + 1.5), QPointF(r.right() - radius, r.y() + 1.5))
+
+        if self._has_progress:
+            bm = 36.0
+            bh = 4.0
+            by = r.bottom() - 24.0
+            bx = r.x() + bm
+            bw = r.width() - bm * 2
+
+            track = QPainterPath()
+            track.addRoundedRect(QRectF(bx, by, bw, bh), bh / 2, bh / 2)
+            p.fillPath(track, QColor(255, 255, 255, 18))
+
+            fw = bw * self._progress
+            if fw > 2:
+                fill = QPainterPath()
+                fill.addRoundedRect(QRectF(bx, by, fw, bh), bh / 2, bh / 2)
+                fg = QLinearGradient(bx, by, bx + fw, by)
+                fg.setColorAt(0.0, QColor(10, 132, 255, 210))
+                fg.setColorAt(1.0, QColor(10, 210, 255, 230))
+                p.fillPath(fill, QBrush(fg))
+
+        p.end()
+
+
 class SplashScreen(QWidget):
-    """Splash d'ouverture : fade-in séquentiel logo → nom → auteur, puis fade-out global."""
+    """Splash d'ouverture — Liquid Glass : glows ambiants + carte verre + barre de progression."""
 
     def __init__(self):
         super().__init__()
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.SplashScreen | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setStyleSheet(f"background-color: {COLORS['bg']};")
+        self.setStyleSheet("background-color: #06060e;")
         screen = QApplication.primaryScreen()
         if screen:
             self.setGeometry(screen.geometry())
         else:
             self.resize(1280, 800)
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(18)
+
+        self._orb_phase = 0.0
+        self._orb_timer = QTimer(self)
+        self._orb_timer.setInterval(16)
+        self._orb_timer.timeout.connect(self._tick)
+
+        outer = QVBoxLayout(self)
+        outer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        self._card = _GlassCard(progress_bar=True)
+        outer.addWidget(self._card, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        card_layout = self._card.layout()
+
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        _px = _logo_pixmap(100)
+        _px = _logo_pixmap(84)
         if _px:
             self.logo_label.setPixmap(_px)
             self.logo_label.setStyleSheet("background: transparent;")
         else:
-            self.logo_label.setText("\U0001f6e1")
-            self.logo_label.setStyleSheet("font-size: 90px; color: rgba(13,13,20,0); background: transparent;")
+            self.logo_label.setText("🛡")
+            self.logo_label.setStyleSheet("font-size: 76px; background: transparent;")
         self._logo_effect = QGraphicsOpacityEffect(self.logo_label)
         self._logo_effect.setOpacity(0.0)
         self.logo_label.setGraphicsEffect(self._logo_effect)
-        self.name_label = QLabel("V  I  G  I  L  E")
-        self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.name_label.setStyleSheet(
-            f"font-size: 44px; font-weight: 600; letter-spacing: 6px; "
-            f"color: rgba(13,13,20,0); background: transparent;"
+
+        self.title_label = QLabel("VIGILE")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title_label.setStyleSheet(
+            "font-size: 38px; font-weight: 700; letter-spacing: 10px; "
+            "color: #FFFFFF; background: transparent; margin-top: 18px;"
         )
-        self.author_label = QLabel("\u00a9 2026 \u2014 Cr\u00e9\u00e9 par Francis NDAYUBAHA")
-        self.author_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.author_label.setStyleSheet(
-            f"font-size: 11px; color: rgba(13,13,20,0); background: transparent;"
+        self._title_effect = QGraphicsOpacityEffect(self.title_label)
+        self._title_effect.setOpacity(0.0)
+        self.title_label.setGraphicsEffect(self._title_effect)
+
+        self.tag_label = QLabel("Chaque équipement a sa sentinelle")
+        self.tag_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.tag_label.setStyleSheet(
+            "font-size: 12px; font-style: italic; letter-spacing: 0.3px; "
+            "color: rgba(255,255,255,0.42); background: transparent; margin-top: 9px;"
         )
-        layout.addStretch(1)
-        layout.addWidget(self.logo_label)
-        layout.addWidget(self.name_label)
-        layout.addStretch(1)
-        layout.addWidget(self.author_label)
-        layout.setContentsMargins(0, 40, 0, 40)
+        self._tag_effect = QGraphicsOpacityEffect(self.tag_label)
+        self._tag_effect.setOpacity(0.0)
+        self.tag_label.setGraphicsEffect(self._tag_effect)
+
+        card_layout.addWidget(self.logo_label)
+        card_layout.addWidget(self.title_label)
+        card_layout.addWidget(self.tag_label)
+        card_layout.addStretch(1)
+
         self._animations: list = []
 
-    def _fade_logo_in(self, duration: int) -> None:
-        anim = QPropertyAnimation(self._logo_effect, b"opacity", self)
-        anim.setDuration(duration)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        anim.start()
-        self._animations.append(anim)
+    def _tick(self) -> None:
+        self._orb_phase += 0.010
+        self.update()
 
-    def _fade_label(self, label: QLabel, target_color: str, duration: int) -> None:
-        """Anime la couleur CSS d'un label de transparent vers target_color."""
-        start = QColor(13, 13, 20, 0)
-        end = QColor(target_color)
-        anim = QVariantAnimation(self, duration=duration)
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        w, h = self.width(), self.height()
+
+        pulse = 0.5 + 0.5 * math.sin(self._orb_phase * 1.2)
+        rc = min(w, h) * 0.44
+        ac = int(45 + pulse * 28)
+        gc = QRadialGradient(w * 0.5, h * 0.5, rc)
+        gc.setColorAt(0.0, QColor(10, 132, 255, ac))
+        gc.setColorAt(0.55, QColor(10, 132, 255, ac // 5))
+        gc.setColorAt(1.0, QColor(10, 132, 255, 0))
+        p.setBrush(QBrush(gc))
+        p.drawEllipse(QPointF(w * 0.5, h * 0.5), rc, rc)
+
+        r2 = min(w, h) * 0.28
+        cx2 = w * 0.10 + math.cos(self._orb_phase * 0.55) * 18
+        cy2 = h * 0.80 + math.sin(self._orb_phase * 0.70) * 14
+        g2 = QRadialGradient(cx2, cy2, r2)
+        g2.setColorAt(0.0, QColor(94, 92, 230, 55))
+        g2.setColorAt(0.55, QColor(94, 92, 230, 14))
+        g2.setColorAt(1.0, QColor(94, 92, 230, 0))
+        p.setBrush(QBrush(g2))
+        p.drawEllipse(QPointF(cx2, cy2), r2, r2)
+
+        r3 = min(w, h) * 0.20
+        cx3 = w * 0.88 + math.sin(self._orb_phase * 0.45) * 16
+        cy3 = h * 0.16 + math.cos(self._orb_phase * 0.62) * 12
+        g3 = QRadialGradient(cx3, cy3, r3)
+        g3.setColorAt(0.0, QColor(10, 210, 255, 38))
+        g3.setColorAt(0.55, QColor(10, 210, 255, 9))
+        g3.setColorAt(1.0, QColor(10, 210, 255, 0))
+        p.setBrush(QBrush(g3))
+        p.drawEllipse(QPointF(cx3, cy3), r3, r3)
+
+        p.end()
+
+    def _fade(self, effect: QGraphicsOpacityEffect, start: float, end: float, duration: int) -> None:
+        anim = QPropertyAnimation(effect, b"opacity", self)
+        anim.setDuration(duration)
         anim.setStartValue(start)
         anim.setEndValue(end)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        current_style = label.styleSheet()
-
-        def _update(color: QColor) -> None:
-            css = current_style
-            # remplace la valeur color: ... existante
-            import re
-            css = re.sub(
-                r"color:[^;]+;",
-                f"color: rgba({color.red()},{color.green()},{color.blue()},{color.alpha()});",
-                css,
-            )
-            label.setStyleSheet(css)
-
-        anim.valueChanged.connect(_update)
         anim.start()
         self._animations.append(anim)
 
     def run(self, on_finished: Callable) -> None:
-        QTimer.singleShot(400,  lambda: self._fade_logo_in(800))
-        QTimer.singleShot(1400, lambda: self._fade_label(self.name_label,   COLORS["text"],   800))
-        QTimer.singleShot(2600, lambda: self._fade_label(self.author_label, COLORS["muted"], 1000))
+        self._orb_timer.start()
+        self.setWindowOpacity(0.0)
+
+        # Fenêtre entière fade-in (évite les effets imbriqués Qt)
+        win_in = QPropertyAnimation(self, b"windowOpacity", self)
+        win_in.setDuration(500)
+        win_in.setStartValue(0.0)
+        win_in.setEndValue(1.0)
+        win_in.setEasingCurve(QEasingCurve.Type.OutCubic)
+        win_in.start()
+        self._animations.append(win_in)
+
+        # Contenu séquentiel
+        QTimer.singleShot(150,  lambda: self._fade(self._logo_effect,  0.0, 1.0, 480))
+        QTimer.singleShot(650,  lambda: self._fade(self._title_effect, 0.0, 1.0, 480))
+        QTimer.singleShot(1000, lambda: self._fade(self._tag_effect,   0.0, 1.0, 420))
+
+        prog_anim = QVariantAnimation(self)
+        prog_anim.setStartValue(0.0)
+        prog_anim.setEndValue(1.0)
+        prog_anim.setDuration(2100)
+        prog_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        prog_anim.valueChanged.connect(lambda v: self._card.set_progress(v))
+        self._animations.append(prog_anim)
+        QTimer.singleShot(700, prog_anim.start)
+
         fade_out = QPropertyAnimation(self, b"windowOpacity", self)
-        fade_out.setDuration(600)
+        fade_out.setDuration(420)
         fade_out.setStartValue(1.0)
         fade_out.setEndValue(0.0)
         fade_out.setEasingCurve(QEasingCurve.Type.InCubic)
         self._fade_out_anim = fade_out
 
-        def _start_fadeout():
+        def _start_fadeout() -> None:
+            self._orb_timer.stop()
             fade_out.start()
 
-        def _finish():
+        def _finish() -> None:
             on_finished()
             self.close()
 
-        QTimer.singleShot(4800, _start_fadeout)
-        QTimer.singleShot(5400, _finish)
+        QTimer.singleShot(3050, _start_fadeout)
+        QTimer.singleShot(3470, _finish)
 
 
 class SplashClosing(QWidget):
-    """Splash de fermeture : éléments visibles dès le départ, fade-out séquentiel."""
+    """Splash de fermeture — Liquid Glass : carte verre + 'À bientôt' + fade-out global."""
 
     def __init__(self):
         super().__init__()
@@ -678,84 +833,125 @@ class SplashClosing(QWidget):
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setStyleSheet(f"background-color: {COLORS['bg']};")
+        self.setStyleSheet("background-color: #06060e;")
         screen = QApplication.primaryScreen()
         if screen:
             self.setGeometry(screen.geometry())
         else:
             self.resize(1280, 800)
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(18)
+
+        self._orb_phase = 0.0
+        self._orb_timer = QTimer(self)
+        self._orb_timer.setInterval(16)
+        self._orb_timer.timeout.connect(self._tick)
+
+        outer = QVBoxLayout(self)
+        outer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        self._card = _GlassCard(progress_bar=False)
+        outer.addWidget(self._card, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        card_layout = self._card.layout()
+
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        _px = _logo_pixmap(100)
+        _px = _logo_pixmap(84)
         if _px:
             self.logo_label.setPixmap(_px)
             self.logo_label.setStyleSheet("background: transparent;")
         else:
-            self.logo_label.setText("\U0001f6e1")
-            self.logo_label.setStyleSheet(f"font-size: 90px; color: {COLORS['info']}; background: transparent;")
-        self._logo_effect = QGraphicsOpacityEffect(self.logo_label)
-        self._logo_effect.setOpacity(1.0)
-        self.logo_label.setGraphicsEffect(self._logo_effect)
-        self.name_label = QLabel("V  I  G  I  L  E")
-        self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.name_label.setStyleSheet(
-            f"font-size: 44px; font-weight: 600; letter-spacing: 6px; "
-            f"color: {COLORS['text']}; background: transparent;"
+            self.logo_label.setText("🛡")
+            self.logo_label.setStyleSheet("font-size: 76px; background: transparent;")
+
+        self.title_label = QLabel("VIGILE")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title_label.setStyleSheet(
+            "font-size: 38px; font-weight: 700; letter-spacing: 10px; "
+            "color: #FFFFFF; background: transparent; margin-top: 18px;"
         )
-        self.author_label = QLabel("\u00a9 2026 \u2014 Cr\u00e9\u00e9 par Francis NDAYUBAHA")
-        self.author_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.author_label.setStyleSheet(
-            f"font-size: 11px; color: {COLORS['muted']}; background: transparent;"
+
+        self.bye_label = QLabel("À bientôt")
+        self.bye_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.bye_label.setStyleSheet(
+            "font-size: 13px; font-style: italic; letter-spacing: 0.3px; "
+            "color: rgba(255,255,255,0.42); background: transparent; margin-top: 10px;"
         )
-        layout.addStretch(1)
-        layout.addWidget(self.logo_label)
-        layout.addWidget(self.name_label)
-        layout.addStretch(1)
-        layout.addWidget(self.author_label)
-        layout.setContentsMargins(0, 40, 0, 40)
+        self._bye_effect = QGraphicsOpacityEffect(self.bye_label)
+        self._bye_effect.setOpacity(0.0)
+        self.bye_label.setGraphicsEffect(self._bye_effect)
+
+        card_layout.addWidget(self.logo_label)
+        card_layout.addWidget(self.title_label)
+        card_layout.addWidget(self.bye_label)
+        card_layout.addStretch(1)
+
         self._animations: list = []
 
-    def _fade_logo_out(self, duration: int) -> None:
-        anim = QPropertyAnimation(self._logo_effect, b"opacity", self)
-        anim.setDuration(duration)
+    def _tick(self) -> None:
+        self._orb_phase += 0.010
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        w, h = self.width(), self.height()
+
+        pulse = 0.5 + 0.5 * math.sin(self._orb_phase * 1.2)
+        rc = min(w, h) * 0.44
+        ac = int(45 + pulse * 28)
+        gc = QRadialGradient(w * 0.5, h * 0.5, rc)
+        gc.setColorAt(0.0, QColor(10, 132, 255, ac))
+        gc.setColorAt(0.55, QColor(10, 132, 255, ac // 5))
+        gc.setColorAt(1.0, QColor(10, 132, 255, 0))
+        p.setBrush(QBrush(gc))
+        p.drawEllipse(QPointF(w * 0.5, h * 0.5), rc, rc)
+
+        r2 = min(w, h) * 0.28
+        cx2 = w * 0.10 + math.cos(self._orb_phase * 0.55) * 18
+        cy2 = h * 0.80 + math.sin(self._orb_phase * 0.70) * 14
+        g2 = QRadialGradient(cx2, cy2, r2)
+        g2.setColorAt(0.0, QColor(94, 92, 230, 55))
+        g2.setColorAt(0.55, QColor(94, 92, 230, 14))
+        g2.setColorAt(1.0, QColor(94, 92, 230, 0))
+        p.setBrush(QBrush(g2))
+        p.drawEllipse(QPointF(cx2, cy2), r2, r2)
+
+        r3 = min(w, h) * 0.20
+        cx3 = w * 0.88 + math.sin(self._orb_phase * 0.45) * 16
+        cy3 = h * 0.16 + math.cos(self._orb_phase * 0.62) * 12
+        g3 = QRadialGradient(cx3, cy3, r3)
+        g3.setColorAt(0.0, QColor(10, 210, 255, 38))
+        g3.setColorAt(0.55, QColor(10, 210, 255, 9))
+        g3.setColorAt(1.0, QColor(10, 210, 255, 0))
+        p.setBrush(QBrush(g3))
+        p.drawEllipse(QPointF(cx3, cy3), r3, r3)
+
+        p.end()
+
+    def run(self) -> None:
+        self._orb_timer.start()
+        anim_bye = QPropertyAnimation(self._bye_effect, b"opacity", self)
+        anim_bye.setDuration(480)
+        anim_bye.setStartValue(0.0)
+        anim_bye.setEndValue(1.0)
+        anim_bye.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim_bye.start()
+        self._animations.append(anim_bye)
+        QTimer.singleShot(1200, self._do_fadeout)
+
+    def _do_fadeout(self) -> None:
+        self._orb_timer.stop()
+        anim = QPropertyAnimation(self, b"windowOpacity", self)
+        anim.setDuration(680)
         anim.setStartValue(1.0)
         anim.setEndValue(0.0)
         anim.setEasingCurve(QEasingCurve.Type.InCubic)
+        anim.finished.connect(QApplication.quit)
         anim.start()
         self._animations.append(anim)
-
-    def _fade_label(self, label: QLabel, duration: int) -> None:
-        """Anime la couleur CSS d'un label vers la couleur de fond (invisible)."""
-        import re
-        current_style = label.styleSheet()
-        match = re.search(r"color:\s*([^;]+);", current_style)
-        start_color = QColor(match.group(1).strip()) if match else QColor(COLORS["text"])
-        end_color = QColor(13, 13, 20, 0)
-        anim = QVariantAnimation(self, duration=duration)
-        anim.setStartValue(start_color)
-        anim.setEndValue(end_color)
-        anim.setEasingCurve(QEasingCurve.Type.InCubic)
-
-        def _update(color: QColor) -> None:
-            css = re.sub(
-                r"color:[^;]+;",
-                f"color: rgba({color.red()},{color.green()},{color.blue()},{color.alpha()});",
-                current_style,
-            )
-            label.setStyleSheet(css)
-
-        anim.valueChanged.connect(_update)
-        anim.start()
-        self._animations.append(anim)
-
-    def run(self) -> None:
-        QTimer.singleShot(400,  lambda: self._fade_label(self.author_label,  800))
-        QTimer.singleShot(1400, lambda: self._fade_label(self.name_label,    800))
-        QTimer.singleShot(2600, lambda: self._fade_logo_out(1000))
-        QTimer.singleShot(3600, QApplication.quit)
 
 
 class SetupFrame(QWidget):
