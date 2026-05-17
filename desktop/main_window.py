@@ -155,7 +155,7 @@ def apply_desktop_theme(theme: str) -> None:
         for widget in app.allWidgets():
             if isinstance(widget, VigileButton):
                 widget._apply_variant()
-            elif isinstance(widget, SidebarButton):
+            elif hasattr(widget, "_refresh_style"):
                 widget._refresh_style()
             widget.update()
 
@@ -262,15 +262,30 @@ class StyledCard(QFrame):
     def __init__(self, parent: QWidget | None = None, padding: int = 14):
         super().__init__(parent)
         self.setObjectName("Card")
-        self._border = QColor(255, 255, 255, 20)
         self._animation = QVariantAnimation(self, duration=200)
-        self._animation.setStartValue(QColor(255, 255, 255, 20))
-        self._animation.setEndValue(QColor(10, 132, 255, 90))
         self._animation.valueChanged.connect(self._on_border_change)
+        self._refresh_style()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(padding, padding, padding, padding)
         layout.setSpacing(12)
         apply_shadow(self, blur=34, y_offset=10, alpha_value=60)
+
+    def _refresh_style(self) -> None:
+        border_hex = COLORS["border"]
+        primary_hex = COLORS["primary"]
+        
+        if _current_theme == "light":
+            start_color = QColor(border_hex)
+            end_color = QColor(primary_hex)
+            end_color.setAlpha(120)
+        else:
+            start_color = QColor(255, 255, 255, 20)
+            end_color = QColor(QColor(primary_hex).red(), QColor(primary_hex).green(), QColor(primary_hex).blue(), 90)
+            
+        self._border = start_color
+        self._animation.setStartValue(start_color)
+        self._animation.setEndValue(end_color)
+        self.update()
 
     def _on_border_change(self, color: QColor) -> None:
         self._border = color
@@ -294,26 +309,131 @@ class StyledCard(QFrame):
 
         path = QPainterPath()
         path.addRoundedRect(r, radius, radius)
-        painter.fillPath(path, QColor(255, 255, 255, 8))
+        
+        if _current_theme == "light":
+            painter.fillPath(path, QColor(COLORS["card"]))
+        else:
+            painter.fillPath(path, QColor(255, 255, 255, 8))
 
         painter.setPen(QPen(self._border, 1.0))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRoundedRect(r, radius, radius)
 
-        hl = QLinearGradient(r.x() + radius, r.y() + 1.0, r.right() - radius, r.y() + 1.0)
-        hl.setColorAt(0.0,  QColor(255, 255, 255, 0))
-        hl.setColorAt(0.20, QColor(255, 255, 255, 85))
-        hl.setColorAt(0.80, QColor(255, 255, 255, 85))
-        hl.setColorAt(1.0,  QColor(255, 255, 255, 0))
-        painter.setPen(QPen(QBrush(hl), 1.2))
-        painter.drawLine(QPointF(r.x() + radius, r.y() + 1.0), QPointF(r.right() - radius, r.y() + 1.0))
+        if _current_theme == "dark":
+            hl = QLinearGradient(r.x() + radius, r.y() + 1.0, r.right() - radius, r.y() + 1.0)
+            hl.setColorAt(0.0,  QColor(255, 255, 255, 0))
+            hl.setColorAt(0.20, QColor(255, 255, 255, 85))
+            hl.setColorAt(0.80, QColor(255, 255, 255, 85))
+            hl.setColorAt(1.0,  QColor(255, 255, 255, 0))
+            painter.setPen(QPen(QBrush(hl), 1.2))
+            painter.drawLine(QPointF(r.x() + radius, r.y() + 1.0), QPointF(r.right() - radius, r.y() + 1.0))
+
+
+class ThemeLabel(QLabel):
+    def __init__(self, text: str, color_key: str, extra_styles: str = ""):
+        self.color_key = color_key
+        self.extra_styles = extra_styles
+        super().__init__(text)
+        self._refresh_style()
+
+    def _refresh_style(self) -> None:
+        color = COLORS[self.color_key]
+        self.setStyleSheet(f"color: {color}; {self.extra_styles}")
+
+
+class ThemeBorderLabel(QLabel):
+    def __init__(self, text: str, border_color_key: str, extra_styles: str = ""):
+        self.border_color_key = border_color_key
+        self.extra_styles = extra_styles
+        super().__init__(text)
+        self._refresh_style()
+
+    def _refresh_style(self) -> None:
+        border_col = COLORS[self.border_color_key]
+        self.setStyleSheet(f"border: 1px dashed {border_col}; border-radius: 14px; {self.extra_styles}")
+
+
+class ThemeLogo(QLabel):
+    def __init__(self, size: int, font_size: int):
+        self.size = size
+        self.font_size = font_size
+        super().__init__()
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setFixedSize(size + 4, size + 4)
+        _px = _logo_pixmap(size)
+        if _px:
+            self.setPixmap(_px)
+            self.setStyleSheet("background: transparent;")
+        else:
+            self.setText("🛡")
+            self._refresh_style()
+
+    def _refresh_style(self) -> None:
+        if not self.pixmap() or self.pixmap().isNull():
+            self.setStyleSheet(f"font-size: {self.font_size}px; color: {COLORS['primary']}; background: transparent;")
+
+
+class ThemeDivider(QFrame):
+    def __init__(self):
+        super().__init__()
+        self.setFrameShape(QFrame.Shape.HLine)
+        self._refresh_style()
+
+    def _refresh_style(self) -> None:
+        self.setStyleSheet(f"background: {COLORS['border']}; max-height: 1px;")
+
+
+class ThemeAvatar(QLabel):
+    def __init__(self, text: str):
+        super().__init__(text)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setFixedSize(44, 44)
+        self._refresh_style()
+
+    def _refresh_style(self) -> None:
+        self.setStyleSheet(
+            f"background: {alpha(COLORS['primary'], 50)}; color: {COLORS['text']}; border-radius: 22px; font-weight: 600;"
+        )
+
+
+class ThemeBadge(QLabel):
+    def __init__(self, text: str, color_key: str, extra_styles: str = ""):
+        self.color_key = color_key
+        self.extra_styles = extra_styles
+        super().__init__(text)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._refresh_style()
+
+    def _refresh_style(self) -> None:
+        color = COLORS[self.color_key]
+        self.setStyleSheet(
+            f"background: {alpha(color, 36)}; color: {color}; {self.extra_styles}"
+        )
+
+
+class KPIBadge(QLabel):
+    def __init__(self, icon: str, color_key: str):
+        self.color_key = color_key
+        super().__init__(icon)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._refresh_style()
+
+    def _refresh_style(self) -> None:
+        color = COLORS[self.color_key]
+        self.setStyleSheet(
+            f"background: {alpha(color, 36)}; color: {color}; padding: 8px; border-radius: 10px; font-size: 18px;"
+        )
 
 
 class StatusBadge(QLabel):
     def __init__(self, state: str, text: str | None = None):
+        self.state = state
         super().__init__(text or state.replace("_", " ").capitalize())
-        color = STATE_COLORS.get(state, COLORS["info"])
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._refresh_style()
+
+    def _refresh_style(self) -> None:
+        color = STATE_COLORS.get(self.state, COLORS["info"])
         self.setStyleSheet(
             f"QLabel {{ background-color: {alpha(color, 45)}; color: {color}; "
             "padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: bold; }}"
@@ -345,6 +465,11 @@ class VigileInput(QFrame):
         self.input.installEventFilter(self)
         layout.addWidget(self.input)
 
+    def _refresh_style(self) -> None:
+        glow_color = QColor(COLORS["primary"])
+        glow_color.setAlpha(80)
+        self._glow.setColor(glow_color)
+
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if watched is self.input and event.type() in (QEvent.Type.FocusIn, QEvent.Type.FocusOut):
             self._glow.setEnabled(event.type() == QEvent.Type.FocusIn)
@@ -372,32 +497,49 @@ class VigileButton(QPushButton):
         self._apply_variant()
 
     def _apply_variant(self) -> None:
-        configs = {
-            "primary": (
-                f"rgba(10,132,255,0.82)", "#FFFFFF",
-                "rgba(10,132,255,0.55)", "rgba(10,132,255,0.92)",
-            ),
-            "secondary": (
-                "rgba(255,255,255,0.07)", "#FFFFFF",
-                "rgba(255,255,255,0.12)", "rgba(255,255,255,0.13)",
-            ),
-            "danger": (
-                f"rgba(255,69,58,0.80)", "#FFFFFF",
-                "rgba(255,69,58,0.50)", "rgba(255,69,58,0.95)",
-            ),
-            "ghost": (
-                "transparent", "rgba(255,255,255,0.70)",
-                "transparent", "rgba(255,255,255,0.07)",
-            ),
-        }
-        bg, fg, border, hover_bg = configs.get(self.variant, configs["primary"])
+        prim = COLORS["primary"]
+        dang = COLORS["danger"]
+        txt = COLORS["text"]
+        
+        if self.variant == "primary":
+            bg = alpha(prim, 210)
+            fg = "#FFFFFF"
+            border = alpha(prim, 140)
+            hover_bg = alpha(prim, 235)
+        elif self.variant == "secondary":
+            if _current_theme == "light":
+                bg = "#FFFFFF"
+                fg = txt
+                border = COLORS["border"]
+                hover_bg = alpha(txt, 15)
+            else:
+                bg = "rgba(255,255,255,0.07)"
+                fg = "#FFFFFF"
+                border = "rgba(255,255,255,0.12)"
+                hover_bg = "rgba(255,255,255,0.13)"
+        elif self.variant == "danger":
+            bg = alpha(dang, 204)
+            fg = "#FFFFFF"
+            border = alpha(dang, 128)
+            hover_bg = alpha(dang, 242)
+        elif self.variant == "ghost":
+            bg = "transparent"
+            fg = alpha(txt, 180)
+            border = "transparent"
+            hover_bg = alpha(txt, 18)
+        else:
+            bg = alpha(prim, 210)
+            fg = "#FFFFFF"
+            border = alpha(prim, 140)
+            hover_bg = alpha(prim, 235)
+
         self.setStyleSheet(
             f"QPushButton {{ background-color: {bg}; color: {fg}; border: 1px solid {border}; "
             f"border-radius: 8px; padding: {self.padding}; font-weight: 600; }}"
             f"QPushButton:hover {{ background-color: {hover_bg}; border-color: {border}; }}"
             f"QPushButton:pressed {{ background-color: {bg}; opacity: 0.8; }}"
-            f"QPushButton:disabled {{ color: rgba(255,255,255,0.26); border: 1px solid rgba(255,255,255,0.05); "
-            f"background-color: rgba(255,255,255,0.03); }}"
+            f"QPushButton:disabled {{ color: {alpha(txt, 66)}; border: 1px solid {alpha(txt, 13)}; "
+            f"background-color: {alpha(txt, 8)}; }}"
         )
 
     def set_loading(self, loading: bool) -> None:
@@ -427,12 +569,18 @@ class SidebarButton(QPushButton):
         self.clicked.connect(lambda: self.clicked_with_key.emit(self.key))
 
     def _refresh_style(self) -> None:
+        txt = COLORS["text"]
+        prim = COLORS["primary"]
+        txt_sec = COLORS["text_secondary"]
+        checked_fg = prim if _current_theme == "light" else "#FFFFFF"
+        hover_fg = txt
+        
         self.setStyleSheet(
             "QPushButton { text-align: left; padding: 12px 16px; border-radius: 10px; "
-            "background: transparent; color: rgba(255,255,255,0.52); font-weight: 500; border: none; }"
-            "QPushButton:hover { background: rgba(255,255,255,0.07); color: #FFFFFF; }"
-            f"QPushButton:checked {{ background: rgba(10,132,255,0.14); color: #FFFFFF; "
-            f"border-left: 2px solid {COLORS['primary']}; padding-left: 14px; border-radius: 10px; }}"
+            f"background: transparent; color: {txt_sec}; font-weight: 500; border: none; }}"
+            f"QPushButton:hover {{ background: {alpha(txt, 18)}; color: {hover_fg}; }}"
+            f"QPushButton:checked {{ background: {alpha(prim, 36)}; color: {checked_fg}; "
+            f"border-left: 2px solid {prim}; padding-left: 14px; border-radius: 10px; }}"
         )
 
 
@@ -493,8 +641,10 @@ class DonutChart(QWidget):
         circle = QRectF(26, 24, 220, 220)
         angle_start = 90 * 16
         for label, value, color in self.items:
+            state_key = label.lower().replace(" ", "_")
+            current_color = STATE_COLORS.get(state_key, color)
             span = -int(360 * 16 * (value / self.total))
-            painter.setPen(QPen(QColor(color), 18))
+            painter.setPen(QPen(QColor(current_color), 18))
             painter.drawArc(circle, angle_start, span)
             angle_start += span
         painter.setPen(Qt.PenStyle.NoPen)
@@ -504,8 +654,10 @@ class DonutChart(QWidget):
         painter.drawText(circle.adjusted(42, 42, -42, -42), Qt.AlignmentFlag.AlignCenter, f"{self.total}\nunités")
         y = 56
         for label, value, color in self.items:
+            state_key = label.lower().replace(" ", "_")
+            current_color = STATE_COLORS.get(state_key, color)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(color))
+            painter.setBrush(QColor(current_color))
             painter.drawEllipse(QRectF(272, y, 10, 10))
             painter.setPen(QColor(COLORS["text"]))
             painter.drawText(QRectF(290, y - 8, 160, 24), 0, f"{label} ({value})")
@@ -513,10 +665,10 @@ class DonutChart(QWidget):
 
 
 class PulseIndicator(QWidget):
-    def __init__(self, color: str):
+    def __init__(self, color_key: str):
         super().__init__()
         self._radius = 8.0
-        self.color = QColor(color)
+        self.color_key = color_key
         self.animation = QVariantAnimation(self, duration=1200)
         self.animation.setStartValue(8.0)
         self.animation.setEndValue(14.0)
@@ -524,6 +676,12 @@ class PulseIndicator(QWidget):
         self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.animation.valueChanged.connect(self._set_radius)
         self.setFixedSize(24, 24)
+        self._refresh_style()
+
+    def _refresh_style(self) -> None:
+        col = COLORS.get(self.color_key, self.color_key)
+        self.color = QColor(col)
+        self.update()
 
     def _set_radius(self, radius: float) -> None:
         self._radius = radius
@@ -619,19 +777,25 @@ class _GlassCard(QWidget):
 
         path = QPainterPath()
         path.addRoundedRect(r, radius, radius)
-        p.fillPath(path, QColor(255, 255, 255, 16))
+        
+        if _current_theme == "light":
+            p.fillPath(path, QColor(255, 255, 255, 210))
+            p.setPen(QPen(QColor(0, 0, 0, 24), 1.0))
+        else:
+            p.fillPath(path, QColor(255, 255, 255, 16))
+            p.setPen(QPen(QColor(255, 255, 255, 28), 1.0))
 
-        p.setPen(QPen(QColor(255, 255, 255, 28), 1.0))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(r, radius, radius)
 
-        hl = QLinearGradient(r.x() + radius, r.y() + 1.5, r.right() - radius, r.y() + 1.5)
-        hl.setColorAt(0.0, QColor(255, 255, 255, 0))
-        hl.setColorAt(0.25, QColor(255, 255, 255, 110))
-        hl.setColorAt(0.75, QColor(255, 255, 255, 110))
-        hl.setColorAt(1.0, QColor(255, 255, 255, 0))
-        p.setPen(QPen(QBrush(hl), 1.5))
-        p.drawLine(QPointF(r.x() + radius, r.y() + 1.5), QPointF(r.right() - radius, r.y() + 1.5))
+        if _current_theme == "dark":
+            hl = QLinearGradient(r.x() + radius, r.y() + 1.5, r.right() - radius, r.y() + 1.5)
+            hl.setColorAt(0.0, QColor(255, 255, 255, 0))
+            hl.setColorAt(0.25, QColor(255, 255, 255, 110))
+            hl.setColorAt(0.75, QColor(255, 255, 255, 110))
+            hl.setColorAt(1.0, QColor(255, 255, 255, 0))
+            p.setPen(QPen(QBrush(hl), 1.5))
+            p.drawLine(QPointF(r.x() + radius, r.y() + 1.5), QPointF(r.right() - radius, r.y() + 1.5))
 
         if self._has_progress:
             bm = 36.0
@@ -642,7 +806,10 @@ class _GlassCard(QWidget):
 
             track = QPainterPath()
             track.addRoundedRect(QRectF(bx, by, bw, bh), bh / 2, bh / 2)
-            p.fillPath(track, QColor(255, 255, 255, 18))
+            if _current_theme == "light":
+                p.fillPath(track, QColor(0, 0, 0, 18))
+            else:
+                p.fillPath(track, QColor(255, 255, 255, 18))
 
             fw = bw * self._progress
             if fw > 2:
@@ -660,12 +827,9 @@ class SplashScreen(QWidget):
     """Splash d'ouverture — Liquid Glass : glows ambiants + carte verre + barre de progression."""
 
     def __init__(self):
-        super().__init__()
-        self.setWindowFlags(
-            Qt.WindowType.SplashScreen | Qt.WindowType.WindowStaysOnTopHint
-        )
+        super().__init__(None, Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.CustomizeWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setStyleSheet("background-color: #06060e;")
+        self.setStyleSheet(f"background-color: {COLORS['bg']};")
         screen = QApplication.primaryScreen()
         if screen:
             self.setGeometry(screen.geometry())
@@ -686,42 +850,26 @@ class SplashScreen(QWidget):
 
         card_layout = self._card.layout()
 
-        self.logo_label = QLabel()
-        self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        _px = _logo_pixmap(84)
-        if _px:
-            self.logo_label.setPixmap(_px)
-            self.logo_label.setStyleSheet("background: transparent;")
-        else:
-            self.logo_label.setText("🛡")
-            self.logo_label.setStyleSheet("font-size: 76px; background: transparent;")
+        self.logo_label = ThemeLogo(84, 76)
         self._logo_effect = QGraphicsOpacityEffect(self.logo_label)
         self._logo_effect.setOpacity(0.0)
         self.logo_label.setGraphicsEffect(self._logo_effect)
 
-        self.title_label = QLabel("VIGILE")
+        self.title_label = ThemeLabel("VIGILE", "text", "font-size: 38px; font-weight: 700; letter-spacing: 10px; background: transparent; margin-top: 18px;")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.title_label.setStyleSheet(
-            "font-size: 38px; font-weight: 700; letter-spacing: 10px; "
-            "color: #FFFFFF; background: transparent; margin-top: 18px;"
-        )
         self._title_effect = QGraphicsOpacityEffect(self.title_label)
         self._title_effect.setOpacity(0.0)
         self.title_label.setGraphicsEffect(self._title_effect)
 
-        self.tag_label = QLabel("Chaque équipement a sa sentinelle")
+        self.tag_label = ThemeLabel("Chaque équipement a sa sentinelle", "text_secondary", "font-size: 12px; font-style: italic; letter-spacing: 0.3px; background: transparent; margin-top: 9px;")
         self.tag_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.tag_label.setStyleSheet(
-            "font-size: 12px; font-style: italic; letter-spacing: 0.3px; "
-            "color: rgba(255,255,255,0.42); background: transparent; margin-top: 9px;"
-        )
         self._tag_effect = QGraphicsOpacityEffect(self.tag_label)
         self._tag_effect.setOpacity(0.0)
         self.tag_label.setGraphicsEffect(self._tag_effect)
 
-        card_layout.addWidget(self.logo_label)
-        card_layout.addWidget(self.title_label)
-        card_layout.addWidget(self.tag_label)
+        card_layout.addWidget(self.logo_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        card_layout.addWidget(self.title_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        card_layout.addWidget(self.tag_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         card_layout.addStretch(1)
 
         self._animations: list = []
@@ -828,12 +976,9 @@ class SplashClosing(QWidget):
     """Splash de fermeture — Liquid Glass : carte verre + 'À bientôt' + fade-out global."""
 
     def __init__(self):
-        super().__init__()
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
-        )
+        super().__init__(None, Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.CustomizeWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setStyleSheet("background-color: #06060e;")
+        self.setStyleSheet(f"background-color: {COLORS['bg']};")
         screen = QApplication.primaryScreen()
         if screen:
             self.setGeometry(screen.geometry())
@@ -854,36 +999,20 @@ class SplashClosing(QWidget):
 
         card_layout = self._card.layout()
 
-        self.logo_label = QLabel()
-        self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        _px = _logo_pixmap(84)
-        if _px:
-            self.logo_label.setPixmap(_px)
-            self.logo_label.setStyleSheet("background: transparent;")
-        else:
-            self.logo_label.setText("🛡")
-            self.logo_label.setStyleSheet("font-size: 76px; background: transparent;")
+        self.logo_label = ThemeLogo(84, 76)
 
-        self.title_label = QLabel("VIGILE")
+        self.title_label = ThemeLabel("VIGILE", "text", "font-size: 38px; font-weight: 700; letter-spacing: 10px; background: transparent; margin-top: 18px;")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.title_label.setStyleSheet(
-            "font-size: 38px; font-weight: 700; letter-spacing: 10px; "
-            "color: #FFFFFF; background: transparent; margin-top: 18px;"
-        )
 
-        self.bye_label = QLabel("À bientôt")
+        self.bye_label = ThemeLabel("À bientôt", "text_secondary", "font-size: 13px; font-style: italic; letter-spacing: 0.3px; background: transparent; margin-top: 10px;")
         self.bye_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.bye_label.setStyleSheet(
-            "font-size: 13px; font-style: italic; letter-spacing: 0.3px; "
-            "color: rgba(255,255,255,0.42); background: transparent; margin-top: 10px;"
-        )
         self._bye_effect = QGraphicsOpacityEffect(self.bye_label)
         self._bye_effect.setOpacity(0.0)
         self.bye_label.setGraphicsEffect(self._bye_effect)
 
-        card_layout.addWidget(self.logo_label)
-        card_layout.addWidget(self.title_label)
-        card_layout.addWidget(self.bye_label)
+        card_layout.addWidget(self.logo_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        card_layout.addWidget(self.title_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        card_layout.addWidget(self.bye_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         card_layout.addStretch(1)
 
         self._animations: list = []
@@ -970,29 +1099,16 @@ class SetupFrame(QWidget):
         center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         center_layout.setSpacing(10)
 
-        logo = QLabel()
-        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        _px = _logo_pixmap(70)
-        if _px:
-            logo.setPixmap(_px)
-            logo.setStyleSheet("background: transparent;")
-        else:
-            logo.setText("🛡")
-            logo.setStyleSheet(f"font-size: 48px; color: {COLORS['primary']};")
-        center_layout.addWidget(logo)
+        logo = ThemeLogo(70, 48)
+        center_layout.addWidget(logo, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         title = QLabel(APP_NAME)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("font-size: 24px; font-weight: 600;")
-        center_layout.addWidget(title)
+        center_layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        badge = QLabel("✦  Premier lancement")
-        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        badge.setStyleSheet(
-            f"background: {alpha(COLORS['primary'], 36)}; color: {COLORS['primary']}; "
-            "padding: 4px 14px; border-radius: 999px; font-size: 11px; font-weight: 600;"
-        )
-        center_layout.addWidget(badge)
+        badge = ThemeBadge("✦  Premier lancement", "primary", "padding: 4px 14px; border-radius: 999px; font-size: 11px; font-weight: 600;")
+        center_layout.addWidget(badge, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         self.card = StyledCard()
         self.card.setMaximumWidth(460)
@@ -1016,8 +1132,7 @@ class SetupFrame(QWidget):
         for field in (self.username, self.email, self.password, self.confirm):
             card_layout.addWidget(field)
 
-        self.error_label = QLabel("")
-        self.error_label.setStyleSheet(f"color: {COLORS['danger']};")
+        self.error_label = ThemeLabel("", "danger")
         self.error_label.setWordWrap(True)
         card_layout.addWidget(self.error_label)
 
@@ -1098,27 +1213,18 @@ class LoginFrame(QWidget):
         center_layout = QVBoxLayout(center)
         center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         center_layout.setSpacing(10)
-        self.logo = QLabel()
-        self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        _px = _logo_pixmap(80)
-        if _px:
-            self.logo.setPixmap(_px)
-            self.logo.setStyleSheet("background: transparent;")
-        else:
-            self.logo.setText("🛡")
-            self.logo.setStyleSheet(f"font-size: 52px; color: {COLORS['primary']};")
+        self.logo = ThemeLogo(80, 52)
         self._logo_effect = QGraphicsOpacityEffect(self.logo)
         self._logo_effect.setOpacity(0.0)
         self.logo.setGraphicsEffect(self._logo_effect)
-        center_layout.addWidget(self.logo)
+        center_layout.addWidget(self.logo, alignment=Qt.AlignmentFlag.AlignHCenter)
         title = QLabel(APP_NAME)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("font-size: 24px; font-weight: 600;")
-        center_layout.addWidget(title)
-        slogan = QLabel(APP_SLOGAN)
+        center_layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignHCenter)
+        slogan = ThemeLabel(APP_SLOGAN, "gold", "font-style: italic;")
         slogan.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        slogan.setStyleSheet(f"color: {COLORS['gold']}; font-style: italic;")
-        center_layout.addWidget(slogan)
+        center_layout.addWidget(slogan, alignment=Qt.AlignmentFlag.AlignHCenter)
         self.card = StyledCard()
         self.card.setMaximumWidth(460)
         self.card.setMinimumWidth(300)
@@ -1134,8 +1240,7 @@ class LoginFrame(QWidget):
         self.password = VigileInput("Mot de passe", "••••••••", password=True)
         card_layout.addWidget(self.username)
         card_layout.addWidget(self.password)
-        self.error_label = QLabel("")
-        self.error_label.setStyleSheet(f"color: {COLORS['danger']};")
+        self.error_label = ThemeLabel("", "danger")
         card_layout.addWidget(self.error_label)
         self.submit = VigileButton("Se connecter", "primary")
         self.submit.clicked.connect(self.authenticate)
@@ -1228,18 +1333,15 @@ class DashboardFrame(QWidget):
         self.kpi_layout.setSpacing(10)
         self.kpis: dict[str, KPIValueLabel] = {}
         specs = [
-            ("total", "Total équipements", "◫", COLORS["info"]),
-            ("disponible", "Disponibles", "✓", COLORS["secondary"]),
-            ("attribue", "En prêt", "👤", COLORS["warning"]),
-            ("maintenance", "En maintenance", "⚠", COLORS["danger"]),
+            ("total", "Total équipements", "◫", "info"),
+            ("disponible", "Disponibles", "✓", "secondary"),
+            ("attribue", "En prêt", "👤", "warning"),
+            ("maintenance", "En maintenance", "⚠", "danger"),
         ]
-        for index, (key, text, icon, color) in enumerate(specs):
+        for index, (key, text, icon, color_key) in enumerate(specs):
             card = StyledCard(padding=14)
             card_layout = card.layout()
-            badge = QLabel(icon)
-            badge.setStyleSheet(
-                f"background: {alpha(color, 36)}; color: {color}; padding: 8px; border-radius: 10px; font-size: 18px;"
-            )
+            badge = KPIBadge(icon, color_key)
             card_layout.addWidget(badge, alignment=Qt.AlignmentFlag.AlignLeft)
             label = QLabel(text)
             label.setObjectName("MutedLabel")
@@ -1254,10 +1356,8 @@ class DashboardFrame(QWidget):
         # Section alertes — masquée par défaut, affichée si attributions > ATTRIBUTION_ALERTE_JOURS
         self.alert_card = StyledCard()
         alert_title_row = QHBoxLayout()
-        alert_icon = QLabel("⚠")
-        alert_icon.setStyleSheet(f"color: {COLORS['warning']}; font-size: 16px;")
-        alert_heading = QLabel(f"Attributions longues (> {ATTRIBUTION_ALERTE_JOURS} j)")
-        alert_heading.setStyleSheet(f"font-weight: 600; color: {COLORS['warning']};")
+        alert_icon = ThemeLabel("⚠", "warning", "font-size: 16px;")
+        alert_heading = ThemeLabel(f"Attributions longues (> {ATTRIBUTION_ALERTE_JOURS} j)", "warning", "font-weight: 600;")
         alert_title_row.addWidget(alert_icon)
         alert_title_row.addWidget(alert_heading)
         alert_title_row.addStretch(1)
@@ -1464,28 +1564,26 @@ class ServerFrame(QWidget):
         cards = QHBoxLayout()
         cards.setSpacing(18)
         self.local_card = StyledCard()
-        self.local_indicator = PulseIndicator(COLORS["secondary"])
+        self.local_indicator = PulseIndicator("secondary")
         local_row = QHBoxLayout()
         local_row.addWidget(self.local_indicator)
         local_row.addWidget(QLabel("Réseau local"))
         local_row.addStretch(1)
         self.local_card.layout().addLayout(local_row)
-        self.local_label = QLabel(self.local_url)
-        self.local_label.setStyleSheet(f"font-size: 18px; font-weight: 600; color: {COLORS['info']};")
+        self.local_label = ThemeLabel(self.local_url, "info", "font-size: 18px; font-weight: 600;")
         self.local_status = QLabel("Prêt à démarrer")
         self.local_status.setObjectName("MutedLabel")
         self.local_card.layout().addWidget(self.local_label)
         self.local_card.layout().addWidget(self.local_status)
         cards.addWidget(self.local_card, 1)
         self.tunnel_card = StyledCard()
-        self.tunnel_indicator = PulseIndicator(COLORS["primary"])
+        self.tunnel_indicator = PulseIndicator("primary")
         tunnel_row = QHBoxLayout()
         tunnel_row.addWidget(self.tunnel_indicator)
         tunnel_row.addWidget(QLabel("Tunnel Internet"))
         tunnel_row.addStretch(1)
         self.tunnel_card.layout().addLayout(tunnel_row)
-        self.tunnel_label = QLabel("Tunnel inactif")
-        self.tunnel_label.setStyleSheet(f"font-size: 18px; font-weight: 600; color: {COLORS['primary']};")
+        self.tunnel_label = ThemeLabel("Tunnel inactif", "primary", "font-size: 18px; font-weight: 600;")
         self.tunnel_status = QLabel("Tunnel arrêté")
         self.tunnel_status.setObjectName("MutedLabel")
         self.tunnel_card.layout().addWidget(self.tunnel_label)
@@ -1672,6 +1770,12 @@ class ServerFrame(QWidget):
         self.tunnel_label.setText("Tunnel inactif")
         self._refresh_qr(None)
 
+    def _refresh_style(self) -> None:
+        self.log_area.setStyleSheet(
+            f"background: {COLORS['input']}; color: {COLORS['text_secondary']}; "
+            "font-family: monospace; font-size: 11px; border-radius: 8px; border: none; padding: 6px;"
+        )
+
 
 class Sidebar(QFrame):
     page_requested = pyqtSignal(str)
@@ -1684,23 +1788,15 @@ class Sidebar(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 14, 12, 14)
         layout.setSpacing(8)
-        self.logo = QLabel()
-        self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        _px = _logo_pixmap(44)
-        if _px:
-            self.logo.setPixmap(_px)
-            self.logo.setStyleSheet("background: transparent;")
-        else:
-            self.logo.setText("🛡")
-            self.logo.setStyleSheet(f"font-size: 26px; color: {COLORS['primary']};")
+        self.logo = ThemeLogo(44, 26)
         self._logo_effect = QGraphicsOpacityEffect(self.logo)
         self._logo_effect.setOpacity(1.0)
         self.logo.setGraphicsEffect(self._logo_effect)
-        layout.addWidget(self.logo)
+        layout.addWidget(self.logo, alignment=Qt.AlignmentFlag.AlignHCenter)
         brand = QLabel(APP_NAME)
         brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
         brand.setStyleSheet("font-size: 15px; font-weight: 600;")
-        layout.addWidget(brand)
+        layout.addWidget(brand, alignment=Qt.AlignmentFlag.AlignHCenter)
         animation = QVariantAnimation(self, duration=1800)
         animation.setStartValue(0.55)
         animation.setEndValue(1.0)
@@ -1708,9 +1804,7 @@ class Sidebar(QFrame):
         animation.valueChanged.connect(lambda value: self._logo_effect.setOpacity(value))
         animation.start()
         self._logo_animation = animation
-        divider = QFrame()
-        divider.setFrameShape(QFrame.Shape.HLine)
-        divider.setStyleSheet(f"background: {COLORS['border']}; max-height: 1px;")
+        divider = ThemeDivider()
         layout.addWidget(divider)
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
@@ -1731,12 +1825,7 @@ class Sidebar(QFrame):
         layout.addStretch(1)
         self.user_card = StyledCard(padding=14)
         top = QHBoxLayout()
-        self.avatar = QLabel("VG")
-        self.avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.avatar.setFixedSize(44, 44)
-        self.avatar.setStyleSheet(
-            f"background: {alpha(COLORS['primary'], 50)}; color: {COLORS['text']}; border-radius: 22px; font-weight: 600;"
-        )
+        self.avatar = ThemeAvatar("VG")
         top.addWidget(self.avatar)
         identity = QVBoxLayout()
         self.username = QLabel("Utilisateur")
@@ -1829,6 +1918,7 @@ class VigileWindow(QMainWindow):
             scroll.setWidget(self.login)
 
         self.body.addWidget(scroll)
+        self.show()
 
     def _on_login_success(self, user_data: dict) -> None:
         self.current_user = user_data

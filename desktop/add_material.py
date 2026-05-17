@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import QComboBox, QDateEdit, QFormLayout, QHBoxLayout, QLab
 
 from config import EMPLACEMENTS_MATERIEL, ETATS_MATERIEL, TYPES_MATERIEL
 from database import get_session
-from desktop.main_window import COLORS, StatusBadge, StyledCard, VigileButton, VigileInput, run_in_thread
+from desktop.main_window import COLORS, StatusBadge, StyledCard, VigileButton, VigileInput, run_in_thread, ThemeLabel, ThemeBorderLabel
 from models import Materiel
 from qr.generator import generer_code_vigile, generer_qr_code
 
@@ -24,13 +24,21 @@ class StepBadge(QLabel):
         super().__init__(f"{index}. {title}")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setFixedHeight(36)
-        self.set_active(False)
+        self._active = False
+        self._refresh_style()
 
     def set_active(self, active: bool) -> None:
+        self._active = active
+        self._refresh_style()
+
+    def _refresh_style(self) -> None:
+        from desktop.main_window import alpha
+        active = self._active
+        bg = alpha(COLORS['primary'], 46) if active else COLORS['input']
+        fg = COLORS['text'] if active else COLORS['text_secondary']
+        border = COLORS['primary'] if active else COLORS['border']
         self.setStyleSheet(
-            f"QLabel {{ background-color: {'rgba(124,107,255,0.18)' if active else COLORS['input']}; "
-            f"color: {COLORS['text'] if active else COLORS['text_secondary']}; "
-            f"border: 1px solid {COLORS['primary'] if active else COLORS['border']}; border-radius: 18px; font-weight: bold; }}"
+            f"QLabel {{ background-color: {bg}; color: {fg}; border: 1px solid {border}; border-radius: 18px; font-weight: bold; }}"
         )
 
 
@@ -59,8 +67,7 @@ class AddMaterialFrame(QWidget):
         body.setSpacing(18)
         form_card = StyledCard()
         form_layout = form_card.layout()
-        self.code_label = QLabel("VIG-—")
-        self.code_label.setStyleSheet(f"font-size: 20px; font-weight: 600; color: {COLORS['primary']};")
+        self.code_label = ThemeLabel("VIG-—", "primary", "font-size: 20px; font-weight: 600;")
         form_layout.addWidget(self.code_label)
         form = QFormLayout()
         form.setSpacing(14)
@@ -104,10 +111,9 @@ class AddMaterialFrame(QWidget):
         self.summary.setWordWrap(True)
         self.summary.setObjectName("MutedLabel")
         preview_layout.addWidget(self.summary)
-        self.qr_label = QLabel("QR en attente")
+        self.qr_label = ThemeBorderLabel("QR en attente", "border", "font-size: 13px;")
         self.qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.qr_label.setMinimumSize(280, 280)
-        self.qr_label.setStyleSheet(f"border: 1px dashed {COLORS['border']}; border-radius: 14px;")
         preview_layout.addWidget(self.qr_label)
         body.addWidget(form_card, 3)
         body.addWidget(preview_card, 2)

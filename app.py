@@ -116,9 +116,8 @@ def main():
     qt_app = QApplication.instance() or QApplication(sys.argv)
     load_theme(qt_app)
 
-    # Créer et afficher la fenêtre principale
+    # Créer la fenêtre principale (qui s'affichera après le splash screen)
     window = VigileWindow(flask_app=flask_app)
-    window.show()
 
     print("[VIGILE] Interface PyQt6 prête.")
     print("[VIGILE] Connectez-vous pour commencer.")
