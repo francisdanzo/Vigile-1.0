@@ -1091,20 +1091,22 @@ class SetupFrame(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(12)
-        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        layout.setSpacing(0)
+        layout.addStretch(1)
 
         center = QWidget()
+        center.setStyleSheet("background: transparent;")
         center_layout = QVBoxLayout(center)
-        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(10)
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
 
         logo = ThemeLogo(70, 48)
-        center_layout.addWidget(logo, alignment=Qt.AlignmentFlag.AlignHCenter)
+        center_layout.addWidget(logo, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
 
         title = QLabel(APP_NAME)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size: 24px; font-weight: 600;")
+        title.setStyleSheet("font-size: 24px; font-weight: 600; background: transparent;")
         center_layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         badge = ThemeBadge("✦  Premier lancement", "primary", "padding: 4px 14px; border-radius: 999px; font-size: 11px; font-weight: 600;")
@@ -1141,8 +1143,10 @@ class SetupFrame(QWidget):
         self.submit.clicked.connect(self._create_admin)
         card_layout.addWidget(self.submit)
 
-        center_layout.addWidget(self.card)
-        layout.addWidget(center)
+        center_layout.addWidget(self.card, alignment=Qt.AlignmentFlag.AlignHCenter)
+        center.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(center, 1, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+        layout.addStretch(1)
 
         for field in (self.username, self.email, self.password, self.confirm):
             field.input.returnPressed.connect(self._create_admin)
@@ -1207,47 +1211,61 @@ class LoginFrame(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(12)
-        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        layout.setSpacing(0)
+        layout.addStretch(1)
+
         center = QWidget()
+        center.setStyleSheet("background: transparent;")
         center_layout = QVBoxLayout(center)
-        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(10)
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+
         self.logo = ThemeLogo(80, 52)
         self._logo_effect = QGraphicsOpacityEffect(self.logo)
         self._logo_effect.setOpacity(0.0)
         self.logo.setGraphicsEffect(self._logo_effect)
-        center_layout.addWidget(self.logo, alignment=Qt.AlignmentFlag.AlignHCenter)
+        center_layout.addWidget(self.logo, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+
         title = QLabel(APP_NAME)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size: 24px; font-weight: 600;")
+        title.setStyleSheet("font-size: 24px; font-weight: 600; background: transparent;")
         center_layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignHCenter)
+
         slogan = ThemeLabel(APP_SLOGAN, "gold", "font-style: italic;")
         slogan.setAlignment(Qt.AlignmentFlag.AlignCenter)
         center_layout.addWidget(slogan, alignment=Qt.AlignmentFlag.AlignHCenter)
+
         self.card = StyledCard()
         self.card.setMaximumWidth(460)
         self.card.setMinimumWidth(300)
         self.card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         card_layout = self.card.layout()
+
         heading = QLabel("Connexion sécurisée")
         heading.setObjectName("PageTitle")
         caption = QLabel("Administration du parc, traçabilité et tunnel terrain.")
         caption.setObjectName("MutedLabel")
         card_layout.addWidget(heading)
         card_layout.addWidget(caption)
+
         self.username = VigileInput("Identifiant", "Nom d'utilisateur")
         self.password = VigileInput("Mot de passe", "••••••••", password=True)
         card_layout.addWidget(self.username)
         card_layout.addWidget(self.password)
+
         self.error_label = ThemeLabel("", "danger")
         card_layout.addWidget(self.error_label)
+
         self.submit = VigileButton("Se connecter", "primary")
         self.submit.clicked.connect(self.authenticate)
         self.submit.setMinimumHeight(42)
         card_layout.addWidget(self.submit)
-        center_layout.addWidget(self.card)
-        layout.addWidget(center)
+
+        center_layout.addWidget(self.card, alignment=Qt.AlignmentFlag.AlignHCenter)
+        center.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(center, 1, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+        layout.addStretch(1)
         self.setMinimumWidth(0)
         self.username.input.returnPressed.connect(self.authenticate)
         self.password.input.returnPressed.connect(self.authenticate)
@@ -1521,7 +1539,10 @@ class TunnelRunner(QThread):
             return
         command = [_get_cloudflared_path(), "tunnel", "--url", f"http://localhost:{self.port}", "--no-autoupdate"]
         try:
-            self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+            kwargs = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT, "text": True, "encoding": "utf-8", "errors": "replace"}
+            if sys.platform == "win32":
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+            self.process = subprocess.Popen(command, **kwargs)
             for line in self.process.stdout or []:
                 if not self._running:
                     break
@@ -1863,6 +1884,7 @@ class VigileWindow(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.resize(1280, 800)
         self.setMinimumSize(960, 620)
+        self._first_show = True
         outer = QWidget()
         outer.setObjectName("WindowRoot")
         self.setCentralWidget(outer)
@@ -1918,7 +1940,11 @@ class VigileWindow(QMainWindow):
             scroll.setWidget(self.login)
 
         self.body.addWidget(scroll)
-        self.show()
+        if self._first_show:
+            self.showMaximized()
+            self._first_show = False
+        else:
+            self.show()
 
     def _on_login_success(self, user_data: dict) -> None:
         self.current_user = user_data

@@ -221,22 +221,18 @@ class CloudflareTunnel:
                     "--url", f"http://localhost:{self.port}",
                     "--no-autoupdate",
                 ]
-                # Sur Windows, on utilise CREATE_NO_WINDOW pour le process enfant
-                startupinfo = None
+                kwargs = {
+                    "stdout": subprocess.PIPE,
+                    "stderr": subprocess.STDOUT,
+                    "text": True,
+                    "bufsize": 1,
+                    "encoding": 'utf-8',
+                    "errors": 'replace'
+                }
                 if platform.system() == "Windows":
-                    startupinfo = subprocess.STARTUPINFO()
-                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
 
-                self._process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1,
-                    startupinfo=startupinfo,
-                    encoding='utf-8',
-                    errors='replace'
-                )
+                self._process = subprocess.Popen(cmd, **kwargs)
                 self._actif = True
 
                 # Lire la sortie ligne par ligne pour trouver l'URL
